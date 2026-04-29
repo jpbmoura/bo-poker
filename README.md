@@ -64,7 +64,30 @@ pnpm build
 pnpm start   # roda o server compilado em ./server/dist
 ```
 
-Em produção, sirva `client/dist/` por trás de qualquer static host (ou pelo próprio Express, se quiser estender).
+Em produção o próprio Express serve `client/dist/` e faz fallback de SPA (`/room/:id` → `index.html`). O cliente conecta no socket pelo mesmo origin, então não precisa de CORS nem de variável apontando para a API.
+
+---
+
+## Deploy no Railway (single service)
+
+Já está tudo configurado em [railway.json](railway.json):
+
+- `build`: `pnpm install --frozen-lockfile && pnpm build`
+- `start`: `pnpm start`
+- `healthcheckPath`: `/health`
+
+Passos:
+
+1. **Criar projeto** no Railway → *Deploy from GitHub repo* (ou `railway up` via CLI).
+2. Railway detecta `pnpm-lock.yaml` e usa Nixpacks com pnpm automaticamente; o `railway.json` sobrescreve os comandos de build/start.
+3. **Variáveis de ambiente** — nenhuma é obrigatória. Opcionais:
+   - `PORT` — Railway injeta automaticamente, o servidor lê via `process.env.PORT`.
+   - `CORS_ORIGIN` — só necessário se for hospedar o cliente em outro domínio.
+4. **Domínio público**: em *Settings → Networking → Generate Domain*. Pronto, a URL serve o app inteiro (frontend + WebSocket).
+
+Como cliente e servidor compartilham origin, WebSocket funciona sem ajuste — o `socket.io-client` chama `io()` sem URL e conecta no mesmo host. O Railway suporta upgrade WebSocket nativamente.
+
+Para validar pós-deploy: abra `https://<seu-app>.up.railway.app/health` (deve retornar `{"status":"ok"}`) e em duas abas teste criar/entrar numa sala.
 
 ---
 
