@@ -1,0 +1,22 @@
+{
+  "name": "bo-poker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BO Poker - Scrum Poker for the BackOffice team",
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"pnpm --filter bo-poker-server dev\" \"pnpm --filter bo-poker-client dev\"",
+    "dev:server": "pnpm --filter bo-poker-server dev",
+    "dev:client": "pnpm --filter bo-poker-client dev",
+    "build": "pnpm --filter bo-poker-client build && pnpm --filter bo-poker-server build",
+    "start": "pnpm --filter bo-poker-server start",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "socket.io-client": "^4.8.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}

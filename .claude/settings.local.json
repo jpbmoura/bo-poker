@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npx vite *)",
+      "Bash(node dist/index.js)",
+      "Bash(curl -s http://localhost:3001/health)",
+      "Bash(node --experimental-default-type=module scripts/smoke.mjs)",
+      "Bash(node scripts/smoke.mjs)",
+      "Bash(pnpm --version)",
+      "Bash(pnpm install *)",
+      "Bash(pnpm run *)",
+      "Bash(pnpm smoke *)"
+    ]
+  }
+}
