@@ -4,6 +4,9 @@
   "private": true,
   "description": "BO Poker - Scrum Poker for the BackOffice team",
   "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"pnpm --filter bo-poker-server dev\" \"pnpm --filter bo-poker-client dev\"",
     "dev:server": "pnpm --filter bo-poker-server dev",

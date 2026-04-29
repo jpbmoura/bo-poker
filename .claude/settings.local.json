@@ -12,7 +12,8 @@
       "Bash(pnpm install *)",
       "Bash(pnpm run *)",
       "Bash(pnpm smoke *)",
-      "Bash(pnpm build *)"
+      "Bash(pnpm build *)",
+      "Bash(pnpm --filter bo-poker-server build)"
     ]
   }
 }
