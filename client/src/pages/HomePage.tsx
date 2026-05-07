@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { nanoid } from 'nanoid';
+import { ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
 
@@ -39,36 +40,48 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4">
-      <div className="flex items-center gap-3 mb-10 text-text">
-        <PokeballIcon size={32} className="text-accent" />
-        <h1 className="text-3xl font-bold tracking-tight">BO Poker</h1>
+    <div className="min-h-screen bg-dot-grid flex flex-col items-center justify-center px-4">
+      <div className="flex items-center gap-2.5 mb-12">
+        <PokeballIcon size={22} className="text-brand" />
+        <h1 className="text-xl font-semibold tracking-tight text-text">BO Poker</h1>
       </div>
 
-      <div className="w-full max-w-md bg-surface border border-border rounded-2xl p-8 shadow-sm">
-        <h2 className="text-lg font-semibold text-text mb-1">Bem-vindo</h2>
-        <p className="text-sm text-muted mb-6">
-          Crie uma nova sala ou entre em uma existente para começar a estimar.
-        </p>
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-semibold text-text tracking-tight mb-2">
+            Estimar em equipe
+          </h2>
+          <p className="text-sm text-muted">
+            Crie uma sala ou entre em uma existente.
+          </p>
+        </div>
 
-        <Button size="lg" className="w-full mb-6" onClick={handleCreate}>
+        <Button
+          variant="solid"
+          size="lg"
+          className="w-full mb-4 group"
+          onClick={handleCreate}
+        >
           Criar nova sala
+          <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
         </Button>
 
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 my-6">
           <div className="flex-1 h-px bg-border" />
-          <span className="text-xs uppercase tracking-wider text-subtle">ou</span>
+          <span className="text-[10px] uppercase tracking-[0.2em] text-subtle">ou</span>
           <div className="flex-1 h-px bg-border" />
         </div>
 
-        <form onSubmit={handleJoin} className="flex flex-col gap-3">
-          <label className="text-sm text-muted">Código da sala</label>
+        <form onSubmit={handleJoin} className="flex flex-col gap-2.5">
+          <label className="text-xs uppercase tracking-wider text-subtle">
+            Código da sala
+          </label>
           <input
             type="text"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="ABC12345"
-            className="w-full bg-surface-elevated border border-border rounded-xl px-4 py-3 text-text placeholder:text-subtle outline-none focus:border-accent/60 transition-colors uppercase tracking-wider"
+            className="w-full bg-surface-2 border border-border rounded-lg px-3.5 py-2.5 text-sm text-text placeholder:text-subtle outline-none focus:border-border-strong focus:bg-surface-3 transition-colors uppercase tracking-wider font-mono"
             maxLength={20}
           />
           <Button type="submit" variant="secondary" disabled={code.trim().length === 0}>
@@ -77,8 +90,8 @@ export default function HomePage() {
         </form>
       </div>
 
-      <footer className="mt-10 text-xs text-subtle">
-        BO Poker · Internal tool · BackOffice
+      <footer className="mt-16 text-[11px] text-subtle font-mono">
+        BO Poker · BackOffice
       </footer>
     </div>
   );

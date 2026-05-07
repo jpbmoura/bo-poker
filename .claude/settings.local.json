@@ -13,7 +13,12 @@
       "Bash(pnpm run *)",
       "Bash(pnpm smoke *)",
       "Bash(pnpm build *)",
-      "Bash(pnpm --filter bo-poker-server build)"
+      "Bash(pnpm --filter bo-poker-server build)",
+      "Bash(ls \"C:/Users/joao_/.claude/projects/d--P-Eduzz-bo-poker/memory/\" 2>&1)",
+      "Read(//c/Users/joao_/.claude/projects/d--P-Eduzz-bo-poker/**)",
+      "Bash(pnpm --filter bo-poker-client add lucide-react @fontsource/jetbrains-mono)",
+      "Bash(pnpm --filter bo-poker-client build)",
+      "Bash(pnpm exec *)"
     ]
   }
 }

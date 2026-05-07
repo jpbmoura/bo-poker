@@ -41,13 +41,13 @@ export function PokemonGrid({ selectedId, onSelect, refreshKey }: PokemonGridPro
 
   if (loading) {
     return (
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-4 gap-2">
         {Array.from({ length: 8 }).map((_, i) => (
           <div
             key={i}
-            className="aspect-square rounded-xl bg-surface-elevated animate-pulse flex items-center justify-center"
+            className="aspect-square rounded-lg bg-surface-2 border border-border animate-pulse flex items-center justify-center"
           >
-            <PokeballIcon size={20} className="text-subtle/40" spinning />
+            <PokeballIcon size={18} className="text-subtle/40" spinning />
           </div>
         ))}
       </div>
@@ -56,14 +56,14 @@ export function PokemonGrid({ selectedId, onSelect, refreshKey }: PokemonGridPro
 
   if (error && pokemons.length === 0) {
     return (
-      <div className="text-center py-6 text-sm text-danger">
+      <div className="text-center py-6 text-xs text-danger">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-4 gap-3">
+    <div className="grid grid-cols-4 gap-2">
       {pokemons.map((p) => {
         const selected = selectedId === p.id;
         return (
@@ -72,10 +72,10 @@ export function PokemonGrid({ selectedId, onSelect, refreshKey }: PokemonGridPro
             type="button"
             onClick={() => onSelect(p)}
             className={cn(
-              'aspect-square rounded-xl bg-surface-elevated border-2 transition-all duration-150 flex flex-col items-center justify-center p-1 hover:border-border-strong',
+              'aspect-square rounded-lg bg-surface-2 border transition-all duration-150 flex flex-col items-center justify-center p-1.5 hover:bg-surface-3',
               selected
-                ? 'border-accent shadow-[0_0_0_3px_var(--accent-soft)]'
-                : 'border-border',
+                ? 'border-text shadow-[0_0_0_1px_var(--text)]'
+                : 'border-border hover:border-border-strong',
             )}
             title={p.name}
           >
@@ -89,7 +89,10 @@ export function PokemonGrid({ selectedId, onSelect, refreshKey }: PokemonGridPro
             ) : (
               <PokeballIcon className="text-subtle" />
             )}
-            <span className="text-[10px] capitalize text-subtle truncate w-full text-center">
+            <span className={cn(
+              'text-[10px] capitalize truncate w-full text-center',
+              selected ? 'text-text' : 'text-subtle',
+            )}>
               {p.name}
             </span>
           </button>

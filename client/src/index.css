@@ -2,27 +2,41 @@
 @import '@fontsource/inter/500.css';
 @import '@fontsource/inter/600.css';
 @import '@fontsource/inter/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --bg: #0F0F12;
-  --surface: #1A1A1F;
-  --surface-elevated: #24242B;
-  --surface-hover: #2E2E36;
-  --border: #2E2E36;
-  --border-strong: #3A3A44;
-  --text: #E8E8EC;
-  --text-muted: #9494A0;
-  --text-subtle: #6B6B76;
-  --accent: #DC2626;
-  --accent-hover: #B91C1C;
-  --accent-soft: #DC262622;
-  --highlight: #FACC15;
+  /* Background layers — neutral zinc, dark but breathable */
+  --bg: #1A1A20;
+  --surface: #232329;
+  --surface-2: #2C2C33;
+  --surface-3: #353540;
+  --surface-4: #404048;
+
+  /* Borders */
+  --border: #32323A;
+  --border-strong: #45454F;
+
+  /* Text */
+  --text: #FAFAFA;
+  --text-muted: #A1A1AA;
+  --text-subtle: #52525B;
+
+  /* Semantic accents (used sparingly) */
   --success: #10B981;
-  --danger: #EF4444;
+  --success-soft: rgba(16, 185, 129, 0.12);
+  --danger: #F87171;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --highlight: #F59E0B;
+  --highlight-soft: rgba(245, 158, 11, 0.14);
+
+  /* Pokeball red — kept only for the brand mark itself */
+  --brand: #EF4444;
 }
 
 * {
@@ -38,10 +52,18 @@ body,
 body {
   margin: 0;
   font-family: 'Inter', system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss03', 'ss01';
   background-color: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+}
+
+/* Subtle dotted grid that matches the screenshot's vibe */
+.bg-dot-grid {
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
+  background-size: 24px 24px;
 }
 
 /* 3D card flip primitives */
@@ -54,7 +76,7 @@ body {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 600ms ease-out;
+  transition: transform 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .flip-card.is-revealed {
@@ -75,6 +97,42 @@ body {
   transform: rotateY(180deg);
 }
 
+/* Confetti — keyframes referenced by inline animation styles in Confetti.tsx */
+@keyframes confetti-fall {
+  0% {
+    transform: translate3d(0, -10vh, 0) rotate(var(--r0));
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--drift), 110vh, 0) rotate(var(--r1));
+    opacity: 1;
+  }
+}
+
+@keyframes confetti-cleanup {
+  to {
+    display: none;
+  }
+}
+
+/* Press feedback for clickable cards/buttons */
+.press-down {
+  transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.press-down:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.lift-on-hover {
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 150ms ease, border-color 150ms ease, box-shadow 200ms ease;
+}
+.lift-on-hover:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
 /* Subtle scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
@@ -86,10 +144,19 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--surface-elevated);
+  background: var(--surface-3);
   border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--surface-hover);
+  background: var(--surface-4);
+}
+
+/* Focus ring helper */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
 }

@@ -7,95 +7,126 @@ interface PlayerCardProps {
   revealed: boolean;
   isSelf: boolean;
   flipDelayMs: number;
+  enterDelayMs: number;
   shaking: boolean;
+  glowing: boolean;
+  risen: boolean;
 }
 
-export function PlayerCard({ player, revealed, isSelf, flipDelayMs, shaking }: PlayerCardProps) {
+export function PlayerCard({
+  player,
+  revealed,
+  isSelf,
+  flipDelayMs,
+  enterDelayMs,
+  shaking,
+  glowing,
+  risen,
+}: PlayerCardProps) {
   const hasVoted = player.vote !== null;
-  const isSpectator = player.role === 'spectator';
   const offline = !player.online;
 
   return (
     <div
       className={cn(
-        'flex flex-col items-center gap-2 transition-opacity',
-        offline && 'opacity-50',
+        'flex flex-col items-center gap-3 transition-opacity animate-card-in',
+        offline && 'opacity-40',
       )}
+      style={{ animationDelay: `${enterDelayMs}ms` }}
     >
-      {/* Card slot */}
-      <div className="h-20 w-14 flex items-end">
-        {isSpectator ? null : (
-          <div className="flip-scene w-full h-full">
-            <div
-              className={cn('flip-card', revealed && hasVoted && 'is-revealed')}
-              style={{
-                transitionDelay: revealed && hasVoted ? `${flipDelayMs}ms` : '0ms',
-              }}
-            >
-              {/* Front (back of card visually until revealed) */}
-              <div className="flip-face front">
-                {hasVoted ? (
-                  <div className="w-full h-full rounded-lg border border-accent/40 bg-gradient-to-b from-accent/20 to-accent/5 flex items-center justify-center">
-                    <PokeballIcon size={24} className="text-accent/70" />
-                  </div>
-                ) : (
-                  <div className="w-full h-full rounded-lg border border-dashed border-border-strong bg-surface flex items-center justify-center">
-                    <span className="text-subtle text-lg">…</span>
-                  </div>
-                )}
-              </div>
-              {/* Back (revealed value) */}
-              <div className="flip-face back">
-                <div className="relative w-full h-full rounded-lg border border-border-strong bg-surface-elevated flex items-center justify-center">
-                  <span className="text-2xl font-bold text-text">
-                    {player.vote ?? '—'}
-                  </span>
-                  {player.pokemon.sprite && (
+      {/* Card */}
+      <div className={cn('relative h-40 w-28', shaking && 'animate-shake')}>
+        {/* Pokémon emerging from behind the card after reveal */}
+        {hasVoted && player.pokemon.sprite && (
+          <img
+            src={player.pokemon.sprite}
+            alt=""
+            aria-hidden="true"
+            className={cn(
+              'absolute left-1/2 top-0 w-20 h-20 -translate-x-1/2 z-0 pointer-events-none',
+              'transition-transform duration-[380ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]',
+              'drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]',
+              risen ? '-translate-y-[54px]' : 'translate-y-0',
+            )}
+          />
+        )}
+
+        <div className="relative z-10 flip-scene w-full h-full">
+          <div
+            className={cn('flip-card', revealed && hasVoted && 'is-revealed')}
+            style={{
+              transitionDelay: revealed && hasVoted ? `${flipDelayMs}ms` : '0ms',
+            }}
+          >
+            {/* Front (face down) — shows the Pokémon as identity */}
+            <div className="flip-face front">
+              {hasVoted ? (
+                <div
+                  className={cn(
+                    'w-full h-full rounded-xl border bg-surface-2 flex items-center justify-center p-3 shadow-sm relative overflow-hidden',
+                    isSelf ? 'border-border-strong' : 'border-border',
+                    glowing && 'animate-glow-once',
+                  )}
+                >
+                  {player.pokemon.sprite ? (
                     <img
                       src={player.pokemon.sprite}
-                      alt=""
-                      className="absolute bottom-0.5 right-0.5 w-5 h-5 object-contain opacity-60"
+                      alt={player.pokemon.name}
+                      className="w-full h-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]"
                     />
+                  ) : (
+                    <PokeballIcon size={48} className="text-muted" />
+                  )}
+                  {/* Subtle "voted" indicator dot */}
+                  <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-success" />
+                </div>
+              ) : (
+                <div className="w-full h-full rounded-xl border border-dashed border-border bg-transparent flex items-center justify-center p-3 opacity-60">
+                  {player.pokemon.sprite ? (
+                    <img
+                      src={player.pokemon.sprite}
+                      alt={player.pokemon.name}
+                      className="w-full h-full object-contain grayscale opacity-40"
+                    />
+                  ) : (
+                    <PokeballIcon size={32} className="text-subtle" />
                   )}
                 </div>
+              )}
+            </div>
+
+            {/* Back (revealed) — shows the value */}
+            <div className="flip-face back">
+              <div
+                className={cn(
+                  'relative w-full h-full rounded-xl border bg-surface-2 flex items-center justify-center shadow-sm overflow-hidden',
+                  isSelf ? 'border-border-strong' : 'border-border',
+                  glowing && 'animate-glow-once',
+                )}
+              >
+                <span className="text-5xl font-mono font-bold text-text">
+                  {player.vote ?? '—'}
+                </span>
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Avatar */}
-      <div
-        className={cn(
-          'relative w-16 h-16 rounded-full bg-surface-elevated border-2 flex items-center justify-center p-1',
-          hasVoted && !isSpectator ? 'border-accent/60' : 'border-border-strong',
-          shaking && 'animate-shake',
-        )}
-      >
-        {player.pokemon.sprite ? (
-          <img
-            src={player.pokemon.sprite}
-            alt={player.pokemon.name}
-            className="w-full h-full object-contain"
-          />
-        ) : (
-          <PokeballIcon className="text-muted" />
-        )}
-        {isSelf && (
-          <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-highlight ring-2 ring-bg" />
-        )}
-      </div>
-
-      <div className="flex flex-col items-center gap-0.5 min-h-[34px]">
-        <span className="text-sm font-medium text-text max-w-[96px] truncate">
-          {player.name}
-        </span>
-        {isSpectator && (
-          <span className="text-[10px] text-muted px-1.5 py-0.5 rounded bg-surface-elevated border border-border">
-            👁 Espectador
+      {/* Name below card */}
+      <div className="flex flex-col items-center gap-0.5 min-h-[28px] max-w-[120px]">
+        <div className="flex items-center gap-1.5">
+          {isSelf && <span className="w-1.5 h-1.5 rounded-full bg-highlight" />}
+          <span
+            className={cn(
+              'text-sm truncate',
+              isSelf ? 'text-text font-medium' : 'text-muted',
+            )}
+          >
+            {player.name}
           </span>
-        )}
-        {offline && !isSpectator && (
+        </div>
+        {offline && (
           <span className="text-[10px] text-subtle">offline</span>
         )}
       </div>

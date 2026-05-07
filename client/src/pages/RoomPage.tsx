@@ -1,38 +1,39 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRoomStore } from '../store/useRoomStore';
 import { useRoom } from '../hooks/useRoom';
 import { useSocket } from '../hooks/useSocket';
 import { EntryDialog } from '../components/EntryDialog';
-import { RoomHeader } from '../components/RoomHeader';
 import { PokerTable } from '../components/PokerTable';
 import { CardDeck } from '../components/CardDeck';
 import { StatsPanel } from '../components/StatsPanel';
-import { RoomControls } from '../components/RoomControls';
-import { PlayerList } from '../components/PlayerList';
+import { IconSidebar } from '../components/IconSidebar';
+import { TopActions } from '../components/TopActions';
+import { SettingsDialog } from '../components/SettingsDialog';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
+import { Button } from '../components/ui/Button';
+import { cn } from '../utils/cn';
 import { computeStats } from '../utils/stats';
 import type { CardValue, PlayerRole, Pokemon } from '../types';
 
-const DEFAULT_SEQUENCE: CardValue[] = ['0', '1', '2', '3', '5', '8', '13', '21', '?', '☕'];
+const DEFAULT_SEQUENCE: CardValue[] = ['0', '1', '2', '3', '5', '8', '13', '21', '?'];
 
 export default function RoomPage() {
   const { roomId = '' } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { connected } = useSocket();
-  const { join, leave, castVote, reveal, reset, setRole } = useRoom(roomId);
+  const { join, leave, castVote, reveal, reset, clearInactive } = useRoom(roomId);
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const roomState = useRoomStore((s) => s.roomState);
   const myPlayerId = useRoomStore((s) => s.myPlayerId);
-  const myRole = useRoomStore((s) => s.myRole);
   const joining = useRoomStore((s) => s.joining);
   const joined = useRoomStore((s) => s.joined);
   const error = useRoomStore((s) => s.error);
   const setEntryData = useRoomStore((s) => s.setEntryData);
-  const setLocalRole = useRoomStore((s) => s.setRole);
   const resetStore = useRoomStore((s) => s.reset);
 
-  // Reset store when room changes
   useEffect(() => {
     return () => {
       resetStore();
@@ -50,10 +51,13 @@ export default function RoomPage() {
     navigate('/');
   };
 
-  const handleToggleRole = () => {
-    const next: PlayerRole = myRole === 'spectator' ? 'voter' : 'spectator';
-    setLocalRole(next);
-    setRole(next);
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const players = roomState?.players ?? [];
@@ -70,17 +74,16 @@ export default function RoomPage() {
   const myVote: CardValue | null =
     myPlayer && myPlayer.vote !== 'HIDDEN' ? (myPlayer.vote as CardValue | null) : null;
 
-  const deckDisabled =
-    !joined ||
-    revealed ||
-    (myPlayer?.role ?? myRole) === 'spectator';
+  const deckDisabled = !joined || revealed;
 
   const someoneVoted = players.some((p) => p.role === 'voter' && p.vote !== null);
   const canReveal = !revealed && someoneVoted;
 
-  return (
-    <div className="min-h-screen flex flex-col">
-      {!joined && (
+  const hasInactive = players.some((p) => !p.online);
+
+  if (!joined) {
+    return (
+      <div className="min-h-screen bg-dot-grid">
         <EntryDialog
           open={!joined}
           roomId={roomId}
@@ -88,63 +91,102 @@ export default function RoomPage() {
           error={error}
           onSubmit={handleEntry}
         />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-dot-grid animate-fade-in">
+      <IconSidebar
+        onCopyLink={handleCopyLink}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onClearInactive={clearInactive}
+        onLeave={handleLeave}
+        onHome={() => navigate('/')}
+        hasInactive={hasInactive}
+      />
+
+      <TopActions me={myPlayer} />
+
+      {roomState && (
+        <div className="fixed top-6 left-14 right-0 z-20 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto animate-fade-up">
+            {!revealed ? (
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={reveal}
+                disabled={!canReveal}
+                className={cn(
+                  'min-w-[160px] press-down',
+                  canReveal && 'animate-pulse-glow',
+                )}
+              >
+                Revelar
+              </Button>
+            ) : (
+              <Button
+                variant="solid"
+                size="lg"
+                onClick={reset}
+                className="min-w-[160px] press-down"
+              >
+                Nova rodada
+              </Button>
+            )}
+          </div>
+        </div>
       )}
 
-      {joined && (
-        <>
-          <RoomHeader roomId={roomId} playerCount={players.length} />
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        roomId={roomId}
+        playerCount={players.length}
+      />
 
-          {!connected && (
-            <div className="bg-danger/10 border-b border-danger/30 text-danger text-xs text-center py-1.5">
-              Reconectando ao servidor...
-            </div>
-          )}
-
-          <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 flex flex-col lg:flex-row gap-6">
-            <div className="flex-1 flex flex-col gap-6">
-              {!roomState ? (
-                <div className="flex-1 flex items-center justify-center text-muted">
-                  <PokeballIcon spinning size={32} className="text-accent/60" />
-                </div>
-              ) : (
-                <>
-                  <PokerTable
-                    players={players}
-                    revealed={revealed}
-                    myPlayerId={myPlayerId}
-                    consensus={stats.consensus}
-                    canReveal={canReveal}
-                    onReveal={reveal}
-                    onReset={reset}
-                  />
-
-                  <StatsPanel stats={stats} visible={revealed} />
-
-                  <div className="flex flex-col gap-2">
-                    <CardDeck
-                      sequence={sequence}
-                      selected={myVote}
-                      disabled={deckDisabled}
-                      onSelect={castVote}
-                    />
-                    <RoomControls
-                      role={myRole}
-                      onToggleRole={handleToggleRole}
-                      onLeave={handleLeave}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-
-            <PlayerList
-              players={players}
-              myPlayerId={myPlayerId}
-              revealed={revealed}
-            />
-          </main>
-        </>
+      {!connected && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 bg-danger-soft border border-danger/30 text-danger text-xs rounded-full backdrop-blur animate-fade-in">
+          Reconectando ao servidor...
+        </div>
       )}
+
+      <main className="pl-14 min-h-screen flex flex-col">
+        {!roomState ? (
+          <div className="flex-1 flex items-center justify-center text-muted">
+            <PokeballIcon spinning size={28} className="text-muted/60" />
+          </div>
+        ) : (
+          <>
+            {/* Center area */}
+            <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 gap-12">
+              <PokerTable
+                players={players}
+                revealed={revealed}
+                myPlayerId={myPlayerId}
+                consensus={stats.consensus}
+              />
+
+              <StatsPanel stats={stats} visible={revealed} />
+            </div>
+
+            {/* Bottom deck */}
+            <div className="pb-8 pt-4">
+              <CardDeck
+                sequence={sequence}
+                selected={myVote}
+                disabled={deckDisabled}
+                onSelect={castVote}
+              />
+              <div className="mt-4 flex justify-center">
+                <span className="px-3 py-1 text-[11px] font-mono text-subtle border border-border rounded-full">
+                  Sala · <span className="text-muted">{roomId}</span>
+                </span>
+              </div>
+            </div>
+          </>
+        )}
+      </main>
     </div>
   );
 }

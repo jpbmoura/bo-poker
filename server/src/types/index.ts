@@ -1,6 +1,6 @@
-export type CardValue = '0' | '1' | '2' | '3' | '5' | '8' | '13' | '21' | '?' | '☕';
+export type CardValue = '0' | '1' | '2' | '3' | '5' | '8' | '13' | '21' | '?';
 
-export const CARD_SEQUENCE: CardValue[] = ['0', '1', '2', '3', '5', '8', '13', '21', '?', '☕'];
+export const CARD_SEQUENCE: CardValue[] = ['0', '1', '2', '3', '5', '8', '13', '21', '?'];
 
 export type PlayerRole = 'voter' | 'spectator';
 

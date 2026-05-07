@@ -45,6 +45,17 @@ export class Room {
     this.players.delete(playerId);
   }
 
+  removeInactive(): number {
+    let removed = 0;
+    for (const [id, player] of this.players) {
+      if (!player.online) {
+        this.players.delete(id);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   markOffline(playerId: string): void {
     const player = this.players.get(playerId);
     if (!player) return;

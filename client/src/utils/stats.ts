@@ -10,7 +10,7 @@ export interface VoteStats {
 }
 
 const isNumeric = (v: CardValue | 'HIDDEN' | null): v is CardValue =>
-  v !== null && v !== 'HIDDEN' && v !== '?' && v !== '☕';
+  v !== null && v !== 'HIDDEN' && v !== '?';
 
 export function computeStats(players: SerializedPlayer[]): VoteStats {
   const voters = players.filter((p) => p.role === 'voter');

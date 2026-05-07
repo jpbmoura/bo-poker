@@ -6,6 +6,7 @@ export const Events = {
   VOTE_REVEAL: 'vote:reveal',
   VOTE_RESET: 'vote:reset',
   PLAYER_SET_ROLE: 'player:setRole',
+  ROOM_CLEAR_INACTIVE: 'room:clearInactive',
 
   // Server -> Client
   ROOM_STATE: 'room:state',

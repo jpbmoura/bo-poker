@@ -118,6 +118,14 @@ export function registerSocketHandlers(io: Server): void {
       broadcastRoomState(io, room.id);
     });
 
+    socket.on(Events.ROOM_CLEAR_INACTIVE, () => {
+      if (!data.roomId) return;
+      const room = RoomManager.get(data.roomId);
+      if (!room) return;
+      const removed = room.removeInactive();
+      if (removed > 0) broadcastRoomState(io, room.id);
+    });
+
     socket.on(Events.PLAYER_SET_ROLE, (payload: { role: PlayerRole }) => {
       if (!data.roomId || !data.playerId) return;
       const room = RoomManager.get(data.roomId);

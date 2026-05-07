@@ -10,6 +10,7 @@ const Events = {
   VOTE_REVEAL: 'vote:reveal',
   VOTE_RESET: 'vote:reset',
   PLAYER_SET_ROLE: 'player:setRole',
+  ROOM_CLEAR_INACTIVE: 'room:clearInactive',
   ROOM_STATE: 'room:state',
   ROOM_JOINED: 'room:joined',
   ROOM_ERROR: 'room:error',
@@ -92,5 +93,9 @@ export function useRoom(roomId: string) {
     socket.emit(Events.PLAYER_SET_ROLE, { role });
   };
 
-  return { join, leave, castVote, reveal, reset, setRole };
+  const clearInactive = () => {
+    socket.emit(Events.ROOM_CLEAR_INACTIVE);
+  };
+
+  return { join, leave, castVote, reveal, reset, setRole, clearInactive };
 }
