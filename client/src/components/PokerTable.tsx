@@ -106,7 +106,6 @@ export function PokerTable({
   const [charging, setCharging] = useState(false);
   const [flipReady, setFlipReady] = useState(false);
   const [sorted, setSorted] = useState(false);
-  const [risen, setRisen] = useState(false);
   const [shaking, setShaking] = useState(false);
   const [glowing, setGlowing] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
@@ -145,7 +144,6 @@ export function PokerTable({
       setCharging(false);
       setFlipReady(false);
       setSorted(false);
-      setRisen(false);
       setShaking(false);
       setGlowing(false);
       setCelebrating(false);
@@ -168,10 +166,9 @@ export function PokerTable({
     const flipEnd = PREP_MS + totalFlipMs;
 
     const tSort = window.setTimeout(() => setSorted(true), flipEnd + 250);
-    const tRise = window.setTimeout(() => setRisen(true), flipEnd + 400);
     const tVerdict = window.setTimeout(() => setVerdict(v), flipEnd + 200);
 
-    const timeouts = [tCharge, tSort, tRise, tVerdict];
+    const timeouts = [tCharge, tSort, tVerdict];
 
     if (v === 'consensus') {
       timeouts.push(
@@ -238,7 +235,6 @@ export function PokerTable({
                   enterDelayMs={idx * 60}
                   shaking={shaking}
                   glowing={glowing}
-                  risen={risen}
                   charging={charging}
                   flipReady={flipReady}
                   isOutlier={revealed && flipReady && outlierIds.has(player.id)}

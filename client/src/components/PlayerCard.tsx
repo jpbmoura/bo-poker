@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '../utils/cn';
 import type { SerializedPlayer } from '../types';
@@ -12,7 +13,6 @@ interface PlayerCardProps {
   enterDelayMs: number;
   shaking: boolean;
   glowing: boolean;
-  risen: boolean;
   charging: boolean;
   flipReady: boolean;
   isOutlier: boolean;
@@ -21,6 +21,9 @@ interface PlayerCardProps {
 }
 
 const FLIP_DURATION_S = 0.7;
+const EMERGE_DURATION_S = 0.7;
+// Pokemon emerges when card hits 90° (edge-on, mid-flip)
+const EMERGE_OFFSET_S = FLIP_DURATION_S * 0.5;
 
 export function PlayerCard({
   player,
@@ -30,7 +33,6 @@ export function PlayerCard({
   enterDelayMs,
   shaking,
   glowing,
-  risen,
   charging,
   flipReady,
   isOutlier,
@@ -41,7 +43,20 @@ export function PlayerCard({
   const offline = !player.online;
   const showRevealed = revealed && flipReady && hasVoted;
   const delaySec = flipDelayMs / 1000;
+  const emergeDelaySec = delaySec + EMERGE_OFFSET_S;
   const voteString = typeof player.vote === 'string' ? player.vote : null;
+
+  const [emerged, setEmerged] = useState(false);
+
+  useEffect(() => {
+    if (!showRevealed) {
+      setEmerged(false);
+      return;
+    }
+    const totalMs = (emergeDelaySec + EMERGE_DURATION_S) * 1000;
+    const t = window.setTimeout(() => setEmerged(true), totalMs);
+    return () => window.clearTimeout(t);
+  }, [showRevealed, emergeDelaySec]);
 
   return (
     <motion.div
@@ -59,21 +74,19 @@ export function PlayerCard({
         scale: { duration: 0.5, delay: enterDelayMs / 1000, ease: [0.22, 1, 0.36, 1] },
       }}
     >
-      {/* Card outer (handles shake + charging scale + celebration bounce) */}
+      {/* Card outer (shake + charging compress) */}
       <motion.div
         className="relative h-40 w-28"
         animate={{
-          scale: charging ? 0.96 : celebrating ? [1, 1.06, 1] : 1,
+          scale: charging ? 0.96 : 1,
           x: shaking ? [0, -4, 4, -3, 3, 0] : 0,
         }}
         transition={{
-          scale: celebrating
-            ? { duration: 0.6, times: [0, 0.5, 1], ease: 'easeOut' }
-            : { duration: 0.25, ease: [0.22, 1, 0.36, 1] },
+          scale: { duration: 0.25, ease: [0.22, 1, 0.36, 1] },
           x: { duration: 0.5, ease: 'easeInOut' },
         }}
       >
-        {/* Charging halo */}
+        {/* Charging halo (pre-flip) */}
         {charging && (
           <motion.div
             aria-hidden
@@ -84,23 +97,134 @@ export function PlayerCard({
           />
         )}
 
-        {/* Pokémon emerging from behind the card after reveal */}
+        {/* Pokémon emerging from the card (Option A: released at 90° of flip) */}
         {hasVoted && player.pokemon.sprite && (
-          <motion.img
-            src={player.pokemon.sprite}
-            alt=""
-            aria-hidden="true"
-            className="absolute left-1/2 top-0 w-20 h-20 z-0 pointer-events-none drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
-            style={{ x: '-50%' }}
-            animate={{
-              y: risen ? (celebrating ? -64 : -54) : 0,
-              scale: celebrating ? [1, 1.12, 1] : 1,
-            }}
-            transition={{
-              y: { type: 'spring', stiffness: 220, damping: 16 },
-              scale: { duration: 0.5, times: [0, 0.5, 1], ease: 'easeOut' },
-            }}
-          />
+          <>
+            {/* Burst flash at emergence point */}
+            <motion.div
+              aria-hidden
+              className="absolute left-1/2 top-8 -translate-x-1/2 w-20 h-20 rounded-full bg-highlight blur-2xl pointer-events-none z-0"
+              initial={{ opacity: 0, scale: 0.4 }}
+              animate={
+                showRevealed
+                  ? { opacity: [0, 0.85, 0], scale: [0.4, 1.6, 2.2] }
+                  : { opacity: 0, scale: 0.4 }
+              }
+              transition={
+                showRevealed
+                  ? {
+                      delay: emergeDelaySec,
+                      duration: 0.7,
+                      times: [0, 0.35, 1],
+                      ease: 'easeOut',
+                    }
+                  : { duration: 0.2 }
+              }
+            />
+            {/* Secondary white spark */}
+            <motion.div
+              aria-hidden
+              className="absolute left-1/2 top-10 -translate-x-1/2 w-12 h-12 rounded-full bg-white blur-md pointer-events-none z-0"
+              initial={{ opacity: 0, scale: 0.3 }}
+              animate={
+                showRevealed
+                  ? { opacity: [0, 0.95, 0], scale: [0.3, 1.4, 1.8] }
+                  : { opacity: 0, scale: 0.3 }
+              }
+              transition={
+                showRevealed
+                  ? {
+                      delay: emergeDelaySec,
+                      duration: 0.5,
+                      times: [0, 0.3, 1],
+                      ease: 'easeOut',
+                    }
+                  : { duration: 0.2 }
+              }
+            />
+
+            {/* Pokémon wrapper: burst emergence */}
+            <motion.div
+              className="absolute left-1/2 top-0 z-20 pointer-events-none w-24 h-24"
+              style={{ x: '-50%' }}
+              initial={{ scale: 0, opacity: 0, y: 24, rotate: -18 }}
+              animate={
+                showRevealed
+                  ? {
+                      scale: [0, 1.35, 1.05],
+                      opacity: [0, 1, 1],
+                      y: -52,
+                      rotate: [-18, 10, 0],
+                    }
+                  : { scale: 0, opacity: 0, y: 24, rotate: -18 }
+              }
+              transition={
+                showRevealed
+                  ? {
+                      scale: {
+                        delay: emergeDelaySec,
+                        duration: EMERGE_DURATION_S,
+                        times: [0, 0.35, 1],
+                        ease: [0.34, 1.56, 0.64, 1],
+                      },
+                      opacity: {
+                        delay: emergeDelaySec,
+                        duration: 0.45,
+                        times: [0, 0.4, 1],
+                      },
+                      y: {
+                        delay: emergeDelaySec,
+                        type: 'spring',
+                        stiffness: 200,
+                        damping: 13,
+                      },
+                      rotate: {
+                        delay: emergeDelaySec,
+                        duration: 0.8,
+                        times: [0, 0.5, 1],
+                        ease: 'easeOut',
+                      },
+                    }
+                  : { duration: 0.25 }
+              }
+            >
+              {/* Inner: idle bob + celebration dance */}
+              <motion.img
+                src={player.pokemon.sprite}
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className="w-full h-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.55)]"
+                animate={
+                  celebrating
+                    ? {
+                        y: [0, -10, 0, -5, 0],
+                        rotate: [0, -8, 8, -4, 0],
+                        scale: [1, 1.15, 0.98, 1.05, 1],
+                      }
+                    : emerged
+                      ? { y: [0, -3, 0] }
+                      : { y: 0, rotate: 0, scale: 1 }
+                }
+                transition={
+                  celebrating
+                    ? {
+                        duration: 0.9,
+                        ease: 'easeInOut',
+                        repeat: 1,
+                        repeatType: 'reverse',
+                      }
+                    : emerged
+                      ? {
+                          duration: 2.6,
+                          repeat: Infinity,
+                          ease: 'easeInOut',
+                        }
+                      : { duration: 0.2 }
+                }
+              />
+            </motion.div>
+          </>
         )}
 
         {/* 3D flip scene */}
