@@ -1,8 +1,7 @@
 import { FormEvent, useState } from 'react';
-import { Dices } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
-import { PokemonGrid } from './PokemonGrid';
+import { PokemonPicker } from './PokemonPicker';
 import { PokeballIcon } from './ui/PokeballIcon';
 import type { Pokemon, PlayerRole, RoomError } from '../types';
 
@@ -17,7 +16,6 @@ interface EntryDialogProps {
 export function EntryDialog({ open, roomId, joining, error, onSubmit }: EntryDialogProps) {
   const [name, setName] = useState('');
   const [pokemon, setPokemon] = useState<Pokemon | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const canSubmit = name.trim().length >= 1 && pokemon !== null && !joining;
 
@@ -55,27 +53,11 @@ export function EntryDialog({ open, roomId, joining, error, onSubmit }: EntryDia
           autoFocus
         />
 
-        <div className="flex items-center justify-between mb-3">
-          <label className="text-xs uppercase tracking-wider text-subtle">
-            Escolha seu Pokémon
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              setPokemon(null);
-              setRefreshKey((k) => k + 1);
-            }}
-            className="text-xs text-muted hover:text-text transition-colors flex items-center gap-1.5 active:scale-95"
-          >
-            <Dices size={13} /> Sortear
-          </button>
-        </div>
+        <label className="block text-xs uppercase tracking-wider text-subtle mb-3">
+          Escolha seu Pokémon
+        </label>
 
-        <PokemonGrid
-          selectedId={pokemon?.id ?? null}
-          onSelect={setPokemon}
-          refreshKey={refreshKey}
-        />
+        <PokemonPicker selected={pokemon} onSelect={setPokemon} />
 
         {error && (
           <div className="mt-4 p-3 bg-danger-soft border border-danger/30 rounded-lg text-xs text-danger animate-fade-in">

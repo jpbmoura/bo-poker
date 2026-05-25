@@ -71,8 +71,32 @@ export default function RoomPage() {
 
   const stats = useMemo(() => computeStats(players), [players]);
 
+  // O servidor mascara o voto do próprio jogador como 'HIDDEN' até o reveal,
+  // então guardamos a escolha localmente para preencher esse buraco.
+  const [localVote, setLocalVote] = useState<CardValue | null>(null);
+
+  // Server é a fonte da verdade para "votou ou não": se vier null, descarta a
+  // memória local imediatamente — evita flash do destaque ao iniciar nova rodada.
+  const serverVote = myPlayer?.vote ?? null;
   const myVote: CardValue | null =
-    myPlayer && myPlayer.vote !== 'HIDDEN' ? (myPlayer.vote as CardValue | null) : null;
+    serverVote === null
+      ? null
+      : serverVote === 'HIDDEN'
+        ? localVote
+        : (serverVote as CardValue);
+
+  useEffect(() => {
+    if (serverVote === null) {
+      setLocalVote(null);
+    } else if (serverVote !== 'HIDDEN') {
+      setLocalVote(serverVote as CardValue);
+    }
+  }, [serverVote]);
+
+  const handleCastVote = (value: CardValue) => {
+    setLocalVote(value);
+    castVote(value);
+  };
 
   const deckDisabled = !joined || revealed;
 
@@ -110,20 +134,36 @@ export default function RoomPage() {
 
       {roomState && (
         <div className="fixed top-6 left-14 right-0 z-20 flex justify-center pointer-events-none">
-          <div className="pointer-events-auto animate-fade-up">
+          <div className="pointer-events-auto animate-fade-up flex flex-col items-center gap-2">
             {!revealed ? (
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={reveal}
-                disabled={!canReveal}
-                className={cn(
-                  'min-w-[160px] press-down',
-                  canReveal && 'animate-pulse-glow',
+              <>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={reveal}
+                  disabled={!canReveal}
+                  className={cn(
+                    'min-w-[160px] press-down',
+                    canReveal && 'animate-pulse-glow',
+                  )}
+                >
+                  Revelar
+                </Button>
+                {stats.votingPlayers > 0 && (
+                  <span
+                    className={cn(
+                      'text-[11px] font-mono px-2.5 py-1 rounded-full border transition-colors',
+                      canReveal
+                        ? 'text-text border-border-strong bg-surface-2/80 backdrop-blur'
+                        : 'text-subtle border-border bg-surface-2/50',
+                    )}
+                  >
+                    {stats.votedCount === 0
+                      ? 'Aguardando votos...'
+                      : `${stats.votedCount}/${stats.votingPlayers} votaram`}
+                  </span>
                 )}
-              >
-                Revelar
-              </Button>
+              </>
             ) : (
               <Button
                 variant="solid"
@@ -165,6 +205,7 @@ export default function RoomPage() {
                 revealed={revealed}
                 myPlayerId={myPlayerId}
                 consensus={stats.consensus}
+                outlierIds={stats.outlierIds}
               />
 
               <StatsPanel stats={stats} visible={revealed} />
@@ -176,7 +217,7 @@ export default function RoomPage() {
                 sequence={sequence}
                 selected={myVote}
                 disabled={deckDisabled}
-                onSelect={castVote}
+                onSelect={handleCastVote}
               />
               <div className="mt-4 flex justify-center">
                 <span className="px-3 py-1 text-[11px] font-mono text-subtle border border-border rounded-full">

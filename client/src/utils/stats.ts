@@ -7,10 +7,35 @@ export interface VoteStats {
   votingPlayers: number;
   votedCount: number;
   numericVotes: number[];
+  outlierIds: Set<string>;
 }
 
 const isNumeric = (v: CardValue | 'HIDDEN' | null): v is CardValue =>
   v !== null && v !== 'HIDDEN' && v !== '?';
+
+function computeOutliers(
+  voters: SerializedPlayer[],
+  consensus: boolean,
+): Set<string> {
+  if (consensus) return new Set();
+  const numericPlayers = voters
+    .filter((p) => isNumeric(p.vote))
+    .map((p) => ({ id: p.id, n: Number(p.vote) }))
+    .filter((p) => !Number.isNaN(p.n));
+
+  if (numericPlayers.length < 3) return new Set();
+
+  const values = numericPlayers.map((p) => p.n);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (max - min < 2) return new Set();
+
+  const out = new Set<string>();
+  for (const p of numericPlayers) {
+    if (p.n === min || p.n === max) out.add(p.id);
+  }
+  return out;
+}
 
 export function computeStats(players: SerializedPlayer[]): VoteStats {
   const voters = players.filter((p) => p.role === 'voter');
@@ -41,6 +66,8 @@ export function computeStats(players: SerializedPlayer[]): VoteStats {
     numericVotes.every((n) => n === numericVotes[0]);
   const consensus = everyoneVoted && allNumeric && allEqual;
 
+  const outlierIds = computeOutliers(voted, consensus);
+
   return {
     average,
     mode,
@@ -48,6 +75,7 @@ export function computeStats(players: SerializedPlayer[]): VoteStats {
     votingPlayers: voters.length,
     votedCount: voted.length,
     numericVotes,
+    outlierIds,
   };
 }
 

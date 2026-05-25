@@ -71,9 +71,55 @@ export default {
         },
         'card-pick': {
           '0%': { transform: 'translateY(0) scale(1)' },
-          '30%': { transform: 'translateY(-26px) scale(1.16)' },
-          '60%': { transform: 'translateY(-10px) scale(0.97)' },
-          '100%': { transform: 'translateY(-16px) scale(1.06)' },
+          '35%': { transform: 'translateY(-34px) scale(1.2)' },
+          '62%': { transform: 'translateY(-14px) scale(1.04)' },
+          '82%': { transform: 'translateY(-22px) scale(1.12)' },
+          '100%': { transform: 'translateY(-20px) scale(1.1)' },
+        },
+        'selected-halo': {
+          '0%, 100%': { opacity: '0.35', transform: 'scale(1)' },
+          '50%': { opacity: '0.65', transform: 'scale(1.06)' },
+        },
+        'selected-float': {
+          '0%, 100%': { transform: 'translateY(-20px) scale(1.1)' },
+          '50%': { transform: 'translateY(-23px) scale(1.1)' },
+        },
+        'slot-roll': {
+          '0%': { transform: 'translateY(-12px) scale(0.92)', opacity: '0' },
+          '40%': { transform: 'translateY(0) scale(1)', opacity: '1' },
+          '60%': { transform: 'translateY(0) scale(1)', opacity: '1' },
+          '100%': { transform: 'translateY(10px) scale(0.92)', opacity: '0' },
+        },
+        'slot-land': {
+          '0%': { transform: 'translateY(-8px) scale(0.85)', opacity: '0' },
+          '55%': { transform: 'translateY(2px) scale(1.12)', opacity: '1' },
+          '80%': { transform: 'translateY(-1px) scale(0.98)' },
+          '100%': { transform: 'translateY(0) scale(1)', opacity: '1' },
+        },
+        'reflow-in': {
+          '0%': { opacity: '0', transform: 'translateY(6px) scale(0.94)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        'pre-flip-jitter': {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '20%': { transform: 'translateX(-1.5px) translateY(-1px)' },
+          '40%': { transform: 'translateX(1.5px) translateY(-1px)' },
+          '60%': { transform: 'translateX(-1px)' },
+          '80%': { transform: 'translateX(1px)' },
+        },
+        'waiting-pulse': {
+          '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
+          '50%': { opacity: '1', transform: 'scale(1.04)' },
+        },
+        'outlier-ring': {
+          '0%, 100%': {
+            boxShadow:
+              '0 0 0 1px rgba(245, 158, 11, 0.55), 0 0 14px -2px rgba(245, 158, 11, 0.35)',
+          },
+          '50%': {
+            boxShadow:
+              '0 0 0 2px rgba(245, 158, 11, 0.85), 0 0 22px 0px rgba(245, 158, 11, 0.55)',
+          },
         },
         'confetti-fall': {
           '0%': {
@@ -99,7 +145,15 @@ export default {
         'spin-slow': 'spin-slow 1s linear infinite',
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
         'glow-once': 'glow-once 2.4s ease-out 1',
-        'card-pick': 'card-pick 480ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+        'card-pick': 'card-pick 540ms cubic-bezier(0.34, 1.6, 0.64, 1) forwards',
+        'selected-halo': 'selected-halo 2.6s ease-in-out infinite',
+        'selected-float': 'selected-float 2.8s ease-in-out infinite',
+        'slot-roll': 'slot-roll 180ms ease-in-out',
+        'slot-land': 'slot-land 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
+        'reflow-in': 'reflow-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'pre-flip-jitter': 'pre-flip-jitter 280ms ease-in-out',
+        'waiting-pulse': 'waiting-pulse 1.6s ease-in-out infinite',
+        'outlier-ring': 'outlier-ring 2.2s ease-in-out infinite',
       },
     },
   },
