@@ -29,43 +29,38 @@ export function Confetti({ active }: ConfettiProps) {
 
     const burstSide = (origin: { x: number; y: number }, angle: number) =>
       fire({
-        particleCount: 70,
+        particleCount: 40,
         angle,
-        spread: 75,
+        spread: 70,
         origin,
         colors: COLORS,
-        shapes: ['circle', 'square', 'star'],
+        shapes: ['circle', 'square'],
         scalar: 1.1,
-        ticks: 300,
+        ticks: 240,
         startVelocity: 55,
-        gravity: 1.05,
+        gravity: 1.1,
       });
 
     const burstCenter = () =>
       fire({
-        particleCount: 90,
+        particleCount: 50,
         angle: 90,
-        spread: 130,
+        spread: 120,
         origin: { x: 0.5, y: 0.45 },
         colors: COLORS,
         shapes: ['star', 'circle'],
-        scalar: 1.4,
-        ticks: 340,
+        scalar: 1.3,
+        ticks: 260,
         startVelocity: 38,
-        gravity: 0.85,
+        gravity: 0.9,
       });
 
     burstSide({ x: 0.08, y: 0.85 }, 60);
     burstSide({ x: 0.92, y: 0.85 }, 120);
     const t1 = window.setTimeout(burstCenter, 180);
-    const t2 = window.setTimeout(() => {
-      burstSide({ x: 0.18, y: 0.9 }, 65);
-      burstSide({ x: 0.82, y: 0.9 }, 115);
-    }, 460);
 
     return () => {
       window.clearTimeout(t1);
-      window.clearTimeout(t2);
     };
   }, [active]);
 

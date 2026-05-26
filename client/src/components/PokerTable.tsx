@@ -117,6 +117,15 @@ export function PokerTable({
   const voters = useMemo(() => players.filter((p) => p.role === 'voter'), [players]);
   const spectators = useMemo(() => players.filter((p) => p.role === 'spectator'), [players]);
 
+  // Snapshot refs read inside the reveal effect so it can depend ONLY on `revealed`
+  // (player updates during the reveal won't tear down active timers).
+  const votersRef = useRef(voters);
+  const consensusRef = useRef(consensus);
+  const outlierIdsRef = useRef(outlierIds);
+  votersRef.current = voters;
+  consensusRef.current = consensus;
+  outlierIdsRef.current = outlierIds;
+
   const displayedVoters = useMemo(() => {
     if (!sorted) return voters;
     return [...voters].sort((a, b) => voteRank(a) - voteRank(b));
@@ -130,17 +139,11 @@ export function PokerTable({
     return displayedVoters.map((_, i) => Math.abs(i - center) * WAVE_STEP_MS);
   }, [displayedVoters]);
 
-  const totalFlipMs = useMemo(() => {
-    if (flipDelays.length === 0) return FLIP_BASE_MS;
-    return Math.max(...flipDelays) + FLIP_BASE_MS;
-  }, [flipDelays]);
-
+  // Effect runs ONLY when `revealed` toggles. Player updates during the reveal
+  // can't tear down the active timers — snapshot is read from refs at run time.
   useEffect(() => {
-    const wasRevealed = prevRevealedRef.current;
-    prevRevealedRef.current = revealed;
-
     if (!revealed) {
-      // Reset phase
+      prevRevealedRef.current = false;
       setCharging(false);
       setFlipReady(false);
       setSorted(false);
@@ -152,33 +155,39 @@ export function PokerTable({
       return;
     }
 
-    if (wasRevealed) return; // already revealed (state churn)
+    if (prevRevealedRef.current) return;
+    prevRevealedRef.current = true;
 
-    // Reveal sequence
+    // Snapshot at reveal moment
+    const snapVoters = votersRef.current;
+    const snapConsensus = consensusRef.current;
+    const snapOutliers = outlierIdsRef.current;
+    const voterCount = snapVoters.length;
+    const center = (voterCount - 1) / 2;
+    const maxDelay = voterCount > 0
+      ? Math.max(...snapVoters.map((_, i) => Math.abs(i - center) * WAVE_STEP_MS))
+      : 0;
+    const localTotalFlipMs = maxDelay + FLIP_BASE_MS;
+    const flipEnd = PREP_MS + localTotalFlipMs;
+    const v = computeVerdict(snapVoters, snapConsensus, snapOutliers);
+
     setCharging(true);
 
-    const tCharge = window.setTimeout(() => {
+    const timeouts: number[] = [];
+    timeouts.push(window.setTimeout(() => {
       setCharging(false);
       setFlipReady(true);
-    }, PREP_MS);
-
-    const v = computeVerdict(voters, consensus, outlierIds);
-    const flipEnd = PREP_MS + totalFlipMs;
-
-    const tSort = window.setTimeout(() => setSorted(true), flipEnd + 250);
-    const tVerdict = window.setTimeout(() => setVerdict(v), flipEnd + 200);
-
-    const timeouts = [tCharge, tSort, tVerdict];
+    }, PREP_MS));
+    timeouts.push(window.setTimeout(() => setSorted(true), flipEnd + 250));
+    timeouts.push(window.setTimeout(() => setVerdict(v), flipEnd + 200));
 
     if (v === 'consensus') {
-      timeouts.push(
-        window.setTimeout(() => {
-          setShaking(true);
-          setGlowing(true);
-          setCelebrating(true);
-          setConfetti(true);
-        }, flipEnd + 300),
-      );
+      timeouts.push(window.setTimeout(() => {
+        setShaking(true);
+        setGlowing(true);
+        setCelebrating(true);
+        setConfetti(true);
+      }, flipEnd + 300));
       timeouts.push(window.setTimeout(() => setShaking(false), flipEnd + 900));
       timeouts.push(window.setTimeout(() => setCelebrating(false), flipEnd + 1200));
       timeouts.push(window.setTimeout(() => setConfetti(false), flipEnd + 3400));
@@ -191,7 +200,7 @@ export function PokerTable({
     }
 
     return () => timeouts.forEach((t) => window.clearTimeout(t));
-  }, [revealed, voters, consensus, outlierIds, totalFlipMs]);
+  }, [revealed]);
 
   return (
     <div className="relative w-full flex flex-col items-center">

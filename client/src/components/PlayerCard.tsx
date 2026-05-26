@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '../utils/cn';
 import type { SerializedPlayer } from '../types';
@@ -25,7 +25,7 @@ const EMERGE_DURATION_S = 0.7;
 // Pokemon emerges when card hits 90° (edge-on, mid-flip)
 const EMERGE_OFFSET_S = FLIP_DURATION_S * 0.5;
 
-export function PlayerCard({
+function PlayerCardInner({
   player,
   revealed,
   isSelf,
@@ -100,43 +100,27 @@ export function PlayerCard({
         {/* Pokémon emerging from the card (Option A: released at 90° of flip) */}
         {hasVoted && player.pokemon.sprite && (
           <>
-            {/* Burst flash at emergence point */}
+            {/* Single radial-gradient flash (no filter — much cheaper than blur) */}
             <motion.div
               aria-hidden
-              className="absolute left-1/2 top-8 -translate-x-1/2 w-20 h-20 rounded-full bg-highlight blur-2xl pointer-events-none z-0"
-              initial={{ opacity: 0, scale: 0.4 }}
-              animate={
-                showRevealed
-                  ? { opacity: [0, 0.85, 0], scale: [0.4, 1.6, 2.2] }
-                  : { opacity: 0, scale: 0.4 }
-              }
-              transition={
-                showRevealed
-                  ? {
-                      delay: emergeDelaySec,
-                      duration: 0.7,
-                      times: [0, 0.35, 1],
-                      ease: 'easeOut',
-                    }
-                  : { duration: 0.2 }
-              }
-            />
-            {/* Secondary white spark */}
-            <motion.div
-              aria-hidden
-              className="absolute left-1/2 top-10 -translate-x-1/2 w-12 h-12 rounded-full bg-white blur-md pointer-events-none z-0"
+              className="absolute left-1/2 top-6 -translate-x-1/2 w-28 h-28 rounded-full pointer-events-none z-0"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0) 70%)',
+                willChange: 'transform, opacity',
+              }}
               initial={{ opacity: 0, scale: 0.3 }}
               animate={
                 showRevealed
-                  ? { opacity: [0, 0.95, 0], scale: [0.3, 1.4, 1.8] }
+                  ? { opacity: [0, 0.9, 0], scale: [0.3, 1.4, 1.9] }
                   : { opacity: 0, scale: 0.3 }
               }
               transition={
                 showRevealed
                   ? {
                       delay: emergeDelaySec,
-                      duration: 0.5,
-                      times: [0, 0.3, 1],
+                      duration: 0.65,
+                      times: [0, 0.35, 1],
                       ease: 'easeOut',
                     }
                   : { duration: 0.2 }
@@ -146,15 +130,15 @@ export function PlayerCard({
             {/* Pokémon wrapper: burst emergence */}
             <motion.div
               className="absolute left-1/2 top-0 z-20 pointer-events-none w-24 h-24"
-              style={{ x: '-50%' }}
+              style={{ x: '-50%', willChange: 'transform, opacity' }}
               initial={{ scale: 0, opacity: 0, y: 24, rotate: -18 }}
               animate={
                 showRevealed
                   ? {
-                      scale: [0, 1.35, 1.05],
+                      scale: [0, 1.3, 1.05],
                       opacity: [0, 1, 1],
                       y: -52,
-                      rotate: [-18, 10, 0],
+                      rotate: 0,
                     }
                   : { scale: 0, opacity: 0, y: 24, rotate: -18 }
               }
@@ -169,7 +153,7 @@ export function PlayerCard({
                       },
                       opacity: {
                         delay: emergeDelaySec,
-                        duration: 0.45,
+                        duration: 0.4,
                         times: [0, 0.4, 1],
                       },
                       y: {
@@ -180,27 +164,27 @@ export function PlayerCard({
                       },
                       rotate: {
                         delay: emergeDelaySec,
-                        duration: 0.8,
-                        times: [0, 0.5, 1],
-                        ease: 'easeOut',
+                        duration: 0.6,
+                        ease: [0.22, 1, 0.36, 1],
                       },
                     }
                   : { duration: 0.25 }
               }
             >
-              {/* Inner: idle bob + celebration dance */}
+              {/* Inner: idle bob + celebration dance (no filter — drop-shadow is expensive on animated elements) */}
               <motion.img
                 src={player.pokemon.sprite}
                 alt=""
                 aria-hidden="true"
                 draggable={false}
-                className="w-full h-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.55)]"
+                className="w-full h-full object-contain"
+                style={{ willChange: 'transform' }}
                 animate={
                   celebrating
                     ? {
-                        y: [0, -10, 0, -5, 0],
-                        rotate: [0, -8, 8, -4, 0],
-                        scale: [1, 1.15, 0.98, 1.05, 1],
+                        y: [0, -10, 0],
+                        rotate: [0, -8, 0],
+                        scale: [1, 1.12, 1],
                       }
                     : emerged
                       ? { y: [0, -3, 0] }
@@ -209,7 +193,7 @@ export function PlayerCard({
                 transition={
                   celebrating
                     ? {
-                        duration: 0.9,
+                        duration: 0.85,
                         ease: 'easeInOut',
                         repeat: 1,
                         repeatType: 'reverse',
@@ -234,22 +218,15 @@ export function PlayerCard({
         >
           <motion.div
             className="relative w-full h-full"
-            style={{ transformStyle: 'preserve-3d' }}
+            style={{ transformStyle: 'preserve-3d', willChange: 'transform' }}
             animate={{
               rotateY: showRevealed ? 180 : 0,
-              z: showRevealed ? [0, 60, 0] : 0,
             }}
             transition={{
               rotateY: {
                 duration: FLIP_DURATION_S,
                 delay: showRevealed ? delaySec : 0,
                 ease: [0.34, 1.56, 0.64, 1],
-              },
-              z: {
-                duration: FLIP_DURATION_S,
-                delay: showRevealed ? delaySec : 0,
-                times: [0, 0.5, 1],
-                ease: 'easeInOut',
               },
             }}
           >
@@ -372,3 +349,32 @@ export function PlayerCard({
     </motion.div>
   );
 }
+
+// Memoize: prevent re-renders when only sibling state changes (e.g. another card's
+// flipDelayMs) but our own props are unchanged. Compares the player object by
+// the fields we actually render rather than reference.
+export const PlayerCard = memo(PlayerCardInner, (a, b) => {
+  if (a.revealed !== b.revealed) return false;
+  if (a.isSelf !== b.isSelf) return false;
+  if (a.flipDelayMs !== b.flipDelayMs) return false;
+  if (a.enterDelayMs !== b.enterDelayMs) return false;
+  if (a.shaking !== b.shaking) return false;
+  if (a.glowing !== b.glowing) return false;
+  if (a.charging !== b.charging) return false;
+  if (a.flipReady !== b.flipReady) return false;
+  if (a.isOutlier !== b.isOutlier) return false;
+  if (a.isWaiting !== b.isWaiting) return false;
+  if (a.celebrating !== b.celebrating) return false;
+  const pa = a.player;
+  const pb = b.player;
+  return (
+    pa.id === pb.id &&
+    pa.name === pb.name &&
+    pa.role === pb.role &&
+    pa.online === pb.online &&
+    pa.vote === pb.vote &&
+    pa.pokemon.id === pb.pokemon.id &&
+    pa.pokemon.sprite === pb.pokemon.sprite
+  );
+});
+
