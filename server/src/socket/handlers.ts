@@ -25,6 +25,21 @@ function isValidPokemon(p: unknown): p is Pokemon {
   );
 }
 
+const TAUROS: Pokemon = {
+  id: 128,
+  name: 'tauros',
+  sprite:
+    'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/128.png',
+};
+
+const FORCED_BY_NAME: Record<string, Pokemon> = {
+  arthur: TAUROS,
+};
+
+function getForcedPokemon(name: string): Pokemon | null {
+  return FORCED_BY_NAME[name.trim().toLowerCase()] ?? null;
+}
+
 function broadcastRoomState(io: Server, roomId: string): void {
   const room = RoomManager.get(roomId);
   if (!room) return;
@@ -62,10 +77,13 @@ export function registerSocketHandlers(io: Server): void {
         return;
       }
 
+      // Override pokemon for forced names regardless of what client sent.
+      const finalPokemon = getForcedPokemon(name) ?? payload.pokemon;
+
       const player = room.addPlayer({
         id: socket.id,
         name,
-        pokemon: payload.pokemon,
+        pokemon: finalPokemon,
         role,
       });
 

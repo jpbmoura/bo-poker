@@ -1,8 +1,10 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import { Zap } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { PokemonPicker } from './PokemonPicker';
 import { PokeballIcon } from './ui/PokeballIcon';
+import { getForcedPokemonForName } from '../utils/forcedPokemon';
 import type { Pokemon, PlayerRole, RoomError } from '../types';
 
 interface EntryDialogProps {
@@ -17,14 +19,26 @@ export function EntryDialog({ open, roomId, joining, error, onSubmit }: EntryDia
   const [name, setName] = useState('');
   const [pokemon, setPokemon] = useState<Pokemon | null>(null);
 
-  const canSubmit = name.trim().length >= 1 && pokemon !== null && !joining;
+  const forcedPokemon = getForcedPokemonForName(name);
+  const locked = forcedPokemon !== null;
+  const effectivePokemon = forcedPokemon ?? pokemon;
+
+  // When the name triggers a forced pokemon, sync the picker's slot to it.
+  useEffect(() => {
+    if (forcedPokemon) {
+      setPokemon(forcedPokemon);
+    }
+  }, [forcedPokemon]);
+
+  const canSubmit =
+    name.trim().length >= 1 && effectivePokemon !== null && !joining;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !pokemon) return;
+    if (!canSubmit || !effectivePokemon) return;
     onSubmit({
       name: name.trim(),
-      pokemon,
+      pokemon: effectivePokemon,
       role: 'voter',
     });
   };
@@ -57,7 +71,20 @@ export function EntryDialog({ open, roomId, joining, error, onSubmit }: EntryDia
           Escolha seu Pokémon
         </label>
 
-        <PokemonPicker selected={pokemon} onSelect={setPokemon} />
+        {locked && (
+          <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-highlight-soft border border-highlight/30 text-highlight animate-fade-in">
+            <Zap size={14} strokeWidth={2.4} />
+            <span className="text-xs font-medium">
+              Arthur sempre joga com Tauros.
+            </span>
+          </div>
+        )}
+
+        <PokemonPicker
+          selected={effectivePokemon}
+          onSelect={setPokemon}
+          locked={locked}
+        />
 
         {error && (
           <div className="mt-4 p-3 bg-danger-soft border border-danger/30 rounded-lg text-xs text-danger animate-fade-in">

@@ -14,6 +14,7 @@ import { PokeballIcon } from './ui/PokeballIcon';
 interface PokemonPickerProps {
   selected: Pokemon | null;
   onSelect: (pokemon: Pokemon | null) => void;
+  locked?: boolean;
 }
 
 const GRID_SIZE = 4;
@@ -42,7 +43,7 @@ function filterIndex(index: PokemonIndexEntry[], rawQuery: string): PokemonIndex
   return [...starts, ...contains].slice(0, GRID_SIZE);
 }
 
-export function PokemonPicker({ selected, onSelect }: PokemonPickerProps) {
+export function PokemonPicker({ selected, onSelect, locked = false }: PokemonPickerProps) {
   const [index, setIndex] = useState<PokemonIndexEntry[]>([]);
   const [indexLoading, setIndexLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -114,15 +115,15 @@ export function PokemonPicker({ selected, onSelect }: PokemonPickerProps) {
 
   const handleSelect = useCallback(
     (p: Pokemon) => {
-      if (rolling) return;
+      if (rolling || locked) return;
       onSelect(p);
       setSlotKey((k) => k + 1);
     },
-    [rolling, onSelect],
+    [rolling, locked, onSelect],
   );
 
   const handleRoll = useCallback(async () => {
-    if (rolling) return;
+    if (rolling || locked) return;
     setRolling(true);
     const finalId = pickRandomId();
     // Pre-fetch the final pokemon so the landing is instant
@@ -160,7 +161,7 @@ export function PokemonPicker({ selected, onSelect }: PokemonPickerProps) {
       rollTimerRef.current = window.setTimeout(tick, delay);
     };
     tick();
-  }, [rolling, rollPool, onSelect]);
+  }, [rolling, locked, rollPool, onSelect]);
 
   const slotPokemon = rolling ? rollSprite : selected;
   const hasQuery = query.trim().length > 0;
@@ -169,9 +170,16 @@ export function PokemonPicker({ selected, onSelect }: PokemonPickerProps) {
   const sortedGrid = useMemo(() => gridItems, [gridItems]);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn('flex flex-col gap-3', locked && 'select-none')}>
       {/* Slot de destaque */}
-      <div className="relative h-24 rounded-xl bg-surface-2 border border-border overflow-hidden flex items-center gap-4 px-4">
+      <div
+        className={cn(
+          'relative h-24 rounded-xl bg-surface-2 border overflow-hidden flex items-center gap-4 px-4 transition-colors',
+          locked
+            ? 'border-highlight/40 shadow-[inset_0_0_24px_-8px_rgba(245,158,11,0.25)]'
+            : 'border-border',
+        )}
+      >
         <div className="relative w-20 h-20 flex-shrink-0 flex items-center justify-center">
           {slotPokemon?.sprite ? (
             <img
@@ -200,7 +208,7 @@ export function PokemonPicker({ selected, onSelect }: PokemonPickerProps) {
               <div className="text-base font-semibold text-text capitalize truncate">
                 {slotPokemon.name}
               </div>
-              {!rolling && (
+              {!rolling && !locked && (
                 <button
                   type="button"
                   onClick={() => onSelect(null)}
@@ -226,7 +234,7 @@ export function PokemonPicker({ selected, onSelect }: PokemonPickerProps) {
         <button
           type="button"
           onClick={handleRoll}
-          disabled={rolling || indexLoading}
+          disabled={rolling || indexLoading || locked}
           className={cn(
             'relative flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg',
             'bg-surface-3 border border-border text-muted hover:text-text hover:border-border-strong',
@@ -268,7 +276,7 @@ export function PokemonPicker({ selected, onSelect }: PokemonPickerProps) {
             }
           }}
           placeholder={indexLoading ? 'Carregando...' : 'Buscar por nome ou número'}
-          disabled={indexLoading}
+          disabled={indexLoading || locked}
           className="w-full bg-surface-2 border border-border rounded-lg pl-9 pr-9 py-2 text-sm text-text placeholder:text-subtle outline-none focus:border-border-strong focus:bg-surface-3 transition-colors disabled:opacity-50"
           role="searchbox"
           aria-label="Buscar Pokémon"
@@ -325,7 +333,7 @@ export function PokemonPicker({ selected, onSelect }: PokemonPickerProps) {
                   key={p.id}
                   type="button"
                   onClick={() => handleSelect(p)}
-                  disabled={rolling}
+                  disabled={rolling || locked}
                   style={{ animationDelay: `${Math.min(i * 28, 280)}ms` }}
                   className={cn(
                     'aspect-square rounded-lg bg-surface-2 border transition-all duration-150 flex flex-col items-center justify-center p-1.5',
