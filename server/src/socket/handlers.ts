@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { Events } from './events.js';
 import { RoomManager } from '../rooms/RoomManager.js';
+import { getForcedPokemon } from '../utils/forcedPokemon.js';
 import type { CardValue, PlayerRole, Pokemon, RoomError } from '../types/index.js';
 
 interface JoinPayload {
@@ -23,21 +24,6 @@ function isValidPokemon(p: unknown): p is Pokemon {
     typeof obj.name === 'string' &&
     typeof obj.sprite === 'string'
   );
-}
-
-const TAUROS: Pokemon = {
-  id: 128,
-  name: 'tauros',
-  sprite:
-    'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/128.png',
-};
-
-const FORCED_BY_NAME: Record<string, Pokemon> = {
-  arthur: TAUROS,
-};
-
-function getForcedPokemon(name: string): Pokemon | null {
-  return FORCED_BY_NAME[name.trim().toLowerCase()] ?? null;
 }
 
 function broadcastRoomState(io: Server, roomId: string): void {

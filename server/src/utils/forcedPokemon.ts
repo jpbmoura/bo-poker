@@ -1,4 +1,4 @@
-import type { Pokemon } from '../types';
+import type { Pokemon } from '../types/index.js';
 
 export const TAUROS: Pokemon = {
   id: 128,
@@ -7,8 +7,7 @@ export const TAUROS: Pokemon = {
     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/128.png',
 };
 
-// IMPORTANT: keep this logic in sync with server/src/utils/forcedPokemon.ts.
-// Tests live in the server package (server/src/utils/forcedPokemon.test.ts).
+// IMPORTANT: keep this logic in sync with client/src/utils/forcedPokemon.ts.
 
 const LEET_MAP: Record<string, string> = {
   '4': 'a',
@@ -36,6 +35,6 @@ export function matchesArthur(name: string): boolean {
   return ARTHUR_PATTERN.test(normalize(name));
 }
 
-export function getForcedPokemonForName(name: string): Pokemon | null {
+export function getForcedPokemon(name: string): Pokemon | null {
   return matchesArthur(name) ? TAUROS : null;
 }
