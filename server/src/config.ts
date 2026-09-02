@@ -41,9 +41,20 @@ if (devPasswordAuth && isProduction) {
   );
 }
 
+const betterAuthUrl = process.env.BETTER_AUTH_URL || 'http://localhost:3001';
+
+/**
+ * `corsOrigin` também alimenta os `trustedOrigins` do Better Auth (que validam
+ * para onde um `callbackURL` pode redirecionar). Cair no default de
+ * desenvolvimento em produção deixaria `localhost` como origem confiável, então
+ * lá o fallback é a própria URL do servidor — que é o caso de origem única.
+ */
+const corsOrigin = process.env.CORS_ORIGIN?.split(',').map((o) => o.trim()).filter(Boolean) ??
+  (isProduction ? [betterAuthUrl] : ['http://localhost:5173']);
+
 export const config = {
   port: num(process.env.PORT, 3001),
-  corsOrigin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:5173'],
+  corsOrigin,
   isProduction,
 
   /** Quanto um jogador offline sobrevive antes de ser removido da sala. */
@@ -61,7 +72,7 @@ export const config = {
    * mesmo com o Vite na :5173 — cookies ignoram porta, então o cookie emitido
    * por localhost:3001 é enviado também para localhost:5173.
    */
-  betterAuthUrl: process.env.BETTER_AUTH_URL || 'http://localhost:3001',
+  betterAuthUrl,
   githubClientId: required('GITHUB_CLIENT_ID', process.env.GITHUB_CLIENT_ID),
   githubClientSecret: required('GITHUB_CLIENT_SECRET', process.env.GITHUB_CLIENT_SECRET),
   devPasswordAuth,

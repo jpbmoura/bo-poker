@@ -196,6 +196,24 @@ Todas opcionais.
 
 > **Deploy**: o estado das salas vive na memória de um processo. O serviço **precisa rodar com 1 réplica** — com duas, cada uma teria a sua própria sala. Escalar horizontalmente exigiria um adapter de Redis e estado compartilhado.
 
+### Deploy no Railway (um serviço)
+
+O servidor **já serve o `client/dist`** (`server/src/index.ts`), então um único serviço entrega a aplicação inteira — que é o arranjo mais simples e o único sem cookie cross-site. O `railway.json` da raiz descreve exatamente esse serviço: build `pnpm build`, start `pnpm start`, healthcheck `/health` e as migrations no `preDeployCommand`.
+
+Variáveis no serviço da aplicação:
+
+```
+DATABASE_URL         = ${{<serviço-do-postgres>.DATABASE_URL}}
+BETTER_AUTH_SECRET   = <openssl rand -base64 32>
+BETTER_AUTH_URL      = https://<dominio-do-servico>
+GITHUB_CLIENT_ID     = <do OAuth App>
+GITHUB_CLIENT_SECRET = <do OAuth App>
+```
+
+`CORS_ORIGIN` é dispensável aqui: em produção, sem ela, a origem confiável passa a ser a própria `BETTER_AUTH_URL`. `ENABLE_DEV_PASSWORD_AUTH` **não pode existir** neste ambiente.
+
+> **Um repo, vários serviços.** O `railway.json` fica na raiz e descreve o serviço da aplicação. Qualquer outro serviço apontado para este mesmo repo vai herdá-lo e tentar rodar `pnpm start` (que sobe o servidor) e o `preDeployCommand` das migrations — sem `DATABASE_URL`, isso vira crash-loop. Cada serviço adicional precisa da própria configuração.
+
 ### Cliente e servidor em domínios separados
 
 Se o cliente e o servidor forem serviços distintos, os dois domínios **precisam ser subdomínios do mesmo domínio raiz** (ex.: `poker.exemplo.com` e `api-poker.exemplo.com`).
