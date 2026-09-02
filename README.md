@@ -196,6 +196,26 @@ Todas opcionais.
 
 > **Deploy**: o estado das salas vive na memória de um processo. O serviço **precisa rodar com 1 réplica** — com duas, cada uma teria a sua própria sala. Escalar horizontalmente exigiria um adapter de Redis e estado compartilhado.
 
+### Cliente e servidor em domínios separados
+
+Se o cliente e o servidor forem serviços distintos, os dois domínios **precisam ser subdomínios do mesmo domínio raiz** (ex.: `poker.exemplo.com` e `api-poker.exemplo.com`).
+
+O motivo é o cookie de sessão. Subdomínios de um mesmo domínio registrável são *same-site*, então o cookie viaja normalmente com `SameSite=Lax`. Já dois domínios de raízes diferentes — inclusive dois `*.up.railway.app`, porque `up.railway.app` está na [Public Suffix List](https://publicsuffix.org/) — tornariam o cookie de **terceiros**: o Safari bloqueia por padrão e o login simplesmente não funcionaria.
+
+Nesse arranjo:
+
+| Onde | Variável | Valor |
+|---|---|---|
+| serviço do servidor | `BETTER_AUTH_URL` | `https://api-poker.exemplo.com` |
+| serviço do servidor | `CORS_ORIGIN` | `https://poker.exemplo.com` |
+| serviço do cliente | `VITE_SERVER_URL` | `https://api-poker.exemplo.com` (build time) |
+
+O callback do GitHub aponta sempre para o **servidor**: `https://api-poker.exemplo.com/api/auth/callback/github`.
+
+Com cliente e servidor na mesma origem (o `pnpm start` serve o `client/dist`), nada disso é necessário: deixe `VITE_SERVER_URL` vazio.
+
+> **Atenção com o `railway.json` num repo de dois serviços.** Ele está na raiz e traz `startCommand`, `healthcheckPath` e o `preDeployCommand` das migrations — tudo pertinente **só ao servidor**. Garanta que o serviço do cliente não o herde, senão o pre-deploy dele tentará migrar um banco que ele não tem e o deploy vai falhar.
+
 ---
 
 ## Setup do login (GitHub + Postgres)

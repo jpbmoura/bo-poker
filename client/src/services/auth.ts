@@ -1,13 +1,20 @@
 import { createAuthClient } from 'better-auth/react';
 import { inferAdditionalFields } from 'better-auth/client/plugins';
 
+/** Origem do servidor. Vazia em dev (Vite faz proxy e tudo é same-origin). */
+export const SERVER_URL = import.meta.env.VITE_SERVER_URL?.trim() || '';
+
 /**
- * Sem `baseURL` de propósito: o default é `window.location.origin`, então as
- * chamadas saem relativas para `/api/auth/*`. Em dev o Vite faz o proxy para a
- * :3001 e em produção é a mesma origem — nos dois casos nenhum CORS entra na
- * jogada e o cookie de sessão viaja normalmente.
+ * Sem `VITE_SERVER_URL`, a `baseURL` fica indefinida e o cliente usa caminhos
+ * relativos (`/api/auth/*`) — é o caso de dev, com o proxy do Vite.
+ *
+ * Com ela, o Better Auth acrescenta `/api/auth` sozinho e manda
+ * `credentials: 'include'` por padrão. Para o cookie chegar, o servidor precisa
+ * de CORS com credenciais liberando exatamente a origem do cliente
+ * (`CORS_ORIGIN`) — e os dois precisam ser subdomínios do mesmo domínio raiz.
  */
 export const authClient = createAuthClient({
+  ...(SERVER_URL ? { baseURL: SERVER_URL } : {}),
   plugins: [
     // Espelha o additionalFields declarado no servidor para o tipo do usuário
     // no cliente incluir o handle do GitHub.
