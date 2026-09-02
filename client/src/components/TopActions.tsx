@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { LogOut } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { PokeballIcon } from './ui/PokeballIcon';
 import type { SerializedPlayer } from '../types';
 
 interface TopActionsProps {
   me: SerializedPlayer | null;
+  onSignOut: () => void;
 }
 
-export function TopActions({ me }: TopActionsProps) {
+export function TopActions({ me, onSignOut }: TopActionsProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -49,7 +51,18 @@ export function TopActions({ me }: TopActionsProps) {
             Você
           </div>
           <div className="text-sm text-text font-medium truncate">{me.name}</div>
+          {me.login && (
+            <div className="text-xs text-subtle font-mono truncate">@{me.login}</div>
+          )}
           <div className="text-xs text-muted capitalize">{me.pokemon.name}</div>
+
+          <button
+            onClick={onSignOut}
+            className="mt-3 w-full flex items-center gap-2 px-2.5 py-2 -mx-0.5 rounded-lg text-xs text-muted hover:text-danger hover:bg-danger-soft transition-colors"
+          >
+            <LogOut size={13} />
+            Sair da conta
+          </button>
         </div>
       )}
     </div>

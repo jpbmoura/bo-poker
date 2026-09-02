@@ -1,23 +1,48 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Zap } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { PokemonPicker } from './PokemonPicker';
 import { PokeballIcon } from './ui/PokeballIcon';
 import { getForcedPokemonForName } from '../utils/forcedPokemon';
+import { PLAYER_NAME_MAX_LENGTH } from '../types';
 import type { Pokemon, PlayerRole, RoomError } from '../types';
+import { updateUser, useSession } from '../services/auth';
 
 interface EntryDialogProps {
   open: boolean;
   roomId: string;
   joining: boolean;
+  connected: boolean;
   error: RoomError | null;
   onSubmit: (data: { name: string; pokemon: Pokemon; role: PlayerRole }) => void;
 }
 
-export function EntryDialog({ open, roomId, joining, error, onSubmit }: EntryDialogProps) {
-  const [name, setName] = useState('');
+export function EntryDialog({
+  open,
+  roomId,
+  joining,
+  connected,
+  error,
+  onSubmit,
+}: EntryDialogProps) {
+  const { data: session } = useSession();
+  // Só o primeiro nome: numa mesa de refinamento é o que a pessoa quer, e o
+  // nome completo do GitHub costuma estourar o card. Ela pode editar.
+  const githubFirstName = (session?.user?.name ?? '')
+    .trim()
+    .split(/\s+/)[0]
+    .slice(0, PLAYER_NAME_MAX_LENGTH);
+
+  const [name, setName] = useState(githubFirstName);
   const [pokemon, setPokemon] = useState<Pokemon | null>(null);
+
+  // A sessão resolve de forma assíncrona; preenche assim que chegar, sem
+  // atropelar o que a pessoa já tiver digitado.
+  const touchedRef = useRef(false);
+  useEffect(() => {
+    if (!touchedRef.current && githubFirstName) setName(githubFirstName);
+  }, [githubFirstName]);
 
   const forcedPokemon = getForcedPokemonForName(name);
   const locked = forcedPokemon !== null;
@@ -30,14 +55,22 @@ export function EntryDialog({ open, roomId, joining, error, onSubmit }: EntryDia
     }
   }, [forcedPokemon]);
 
+  // Sem a guarda de conexao o emit ia para o buffer do socket e o botao ficava
+  // em "Entrando..." sem nunca receber resposta.
   const canSubmit =
-    name.trim().length >= 1 && effectivePokemon !== null && !joining;
+    name.trim().length >= 1 && effectivePokemon !== null && !joining && connected;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit || !effectivePokemon) return;
+    const finalName = name.trim();
+    // O nome editado vive na conta, então segue a pessoa para outras salas e
+    // outras máquinas. Falha aqui não impede entrar na sala.
+    if (finalName !== session?.user?.name) {
+      void updateUser({ name: finalName }).catch(() => undefined);
+    }
     onSubmit({
-      name: name.trim(),
+      name: finalName,
       pokemon: effectivePokemon,
       role: 'voter',
     });
@@ -60,10 +93,13 @@ export function EntryDialog({ open, roomId, joining, error, onSubmit }: EntryDia
         <input
           type="text"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            touchedRef.current = true;
+            setName(e.target.value);
+          }}
           placeholder="Como aparecerá na mesa"
           className="w-full bg-surface-2 border border-border rounded-lg px-3.5 py-2.5 text-sm text-text placeholder:text-subtle outline-none focus:border-border-strong focus:bg-surface-3 transition-colors mb-6"
-          maxLength={20}
+          maxLength={PLAYER_NAME_MAX_LENGTH}
           autoFocus
         />
 
@@ -89,6 +125,13 @@ export function EntryDialog({ open, roomId, joining, error, onSubmit }: EntryDia
         {error && (
           <div className="mt-4 p-3 bg-danger-soft border border-danger/30 rounded-lg text-xs text-danger animate-fade-in">
             {error.message}
+          </div>
+        )}
+
+        {!connected && (
+          <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-border text-subtle animate-fade-in">
+            <PokeballIcon spinning size={12} className="text-subtle" />
+            <span className="text-xs">Conectando ao servidor...</span>
           </div>
         )}
 

@@ -1,0 +1,23 @@
+# Postgres de desenvolvimento. O Better Auth precisa de banco para guardar
+# user/session/account; o estado das SALAS continua em memória no processo.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bo-poker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bopoker
+      POSTGRES_PASSWORD: bopoker
+      POSTGRES_DB: bopoker
+    ports:
+      - '5432:5432'
+    volumes:
+      - bo-poker-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U bopoker -d bopoker']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  bo-poker-pgdata:

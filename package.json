@@ -13,13 +13,19 @@
     "dev:client": "pnpm --filter bo-poker-client dev",
     "build": "pnpm --filter bo-poker-client build && pnpm --filter bo-poker-server build",
     "start": "pnpm --filter bo-poker-server start",
-    "smoke": "node scripts/smoke.mjs"
+    "test": "pnpm --filter bo-poker-server test",
+    "smoke": "node scripts/smoke.mjs",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter bo-poker-server db:migrate"
   },
   "devDependencies": {
     "concurrently": "^9.0.1",
     "socket.io-client": "^4.8.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

@@ -340,6 +340,8 @@ function PlayerCardInner({
               'text-sm truncate',
               isSelf ? 'text-text font-medium' : 'text-muted',
             )}
+            // Desambigua dois nomes de exibição iguais sem poluir o card.
+            title={player.login ? `@${player.login}` : undefined}
           >
             {player.name}
           </span>
@@ -370,6 +372,9 @@ export const PlayerCard = memo(PlayerCardInner, (a, b) => {
   return (
     pa.id === pb.id &&
     pa.name === pb.name &&
+    // Comparador escrito à mão: campo que não estiver aqui simplesmente não
+    // re-renderiza.
+    pa.login === pb.login &&
     pa.role === pb.role &&
     pa.online === pb.online &&
     pa.vote === pb.vote &&

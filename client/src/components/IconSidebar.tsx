@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link2, Settings, LogOut, Check, Eraser } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { PokeballIcon } from './ui/PokeballIcon';
@@ -23,11 +23,22 @@ export function IconSidebar({
   const [copied, setCopied] = useState(false);
   const [cleared, setCleared] = useState(false);
 
+  // Ambos os timers vazavam: setState depois do unmount se a pessoa saisse da
+  // sala dentro dos 1,5s do feedback.
+  const timers = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      timers.current.forEach((t) => window.clearTimeout(t));
+      timers.current = [];
+    },
+    [],
+  );
+
   const handleCopy = async () => {
     const ok = await onCopyLink();
     if (ok) {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      timers.current.push(window.setTimeout(() => setCopied(false), 1500));
     }
   };
 
@@ -35,7 +46,7 @@ export function IconSidebar({
     if (!hasInactive) return;
     onClearInactive();
     setCleared(true);
-    window.setTimeout(() => setCleared(false), 1500);
+    timers.current.push(window.setTimeout(() => setCleared(false), 1500));
   };
 
   return (

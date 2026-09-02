@@ -14,7 +14,8 @@ export function CardDeck({ sequence, selected, disabled, onSelect }: CardDeckPro
 
   const handleSelect = (value: CardValue) => {
     if (disabled) return;
-    if (selected === value && picking === null) return;
+    // Reclicar a carta ja destacada precisa reenviar: se o voto anterior foi
+    // recusado pelo servidor, este era o unico jeito de tentar de novo.
     setPicking(value);
     onSelect(value);
   };

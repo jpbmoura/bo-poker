@@ -37,8 +37,24 @@ function computeOutliers(
   return out;
 }
 
+/**
+ * Quem realmente conta numa rodada.
+ *
+ * Filtrar so por `online` seria errado: quem votou 8 e fechou o notebook deu um
+ * dado real, e remove-lo faria a media de todo mundo mudar sozinha no meio da
+ * rodada. Ja um fantasma que nunca votou nao pode travar o `everyoneVoted` --
+ * era isso que impedia o consenso (e o confete) de disparar.
+ */
+export function eligibleVoters(players: SerializedPlayer[]): SerializedPlayer[] {
+  return players.filter((p) => p.role === 'voter' && (p.online || p.vote !== null));
+}
+
+export function someoneVoted(players: SerializedPlayer[]): boolean {
+  return eligibleVoters(players).some((p) => p.vote !== null);
+}
+
 export function computeStats(players: SerializedPlayer[]): VoteStats {
-  const voters = players.filter((p) => p.role === 'voter');
+  const voters = eligibleVoters(players);
   const voted = voters.filter((p) => p.vote !== null);
   const numericVotes = voted
     .filter((p) => isNumeric(p.vote))

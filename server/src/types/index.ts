@@ -1,42 +1,27 @@
-export type CardValue = '0' | '1' | '2' | '3' | '5' | '8' | '13' | '21' | '?';
+export * from './wire.js';
 
-export const CARD_SEQUENCE: CardValue[] = ['0', '1', '2', '3', '5', '8', '13', '21', '?'];
+import type { CardValue, PlayerRole, Pokemon } from './wire.js';
 
-export type PlayerRole = 'voter' | 'spectator';
-
-export interface Pokemon {
-  id: number;
-  name: string;
-  sprite: string;
-}
-
+/**
+ * Estado interno do jogador. NÃO é serializado direto para o wire — o
+ * `SerializedPlayer` é declarado à parte em wire.ts e construído campo a campo
+ * em `Room.serializeFor`, para que nada interno vaze por acidente.
+ */
 export interface Player {
+  /** Id opaco e estável enquanto o jogador existir na sala. */
   id: string;
+  /** Identidade autenticada (`user:<id>`), vinda da sessão do socket. */
+  identityKey: string;
   name: string;
+  /** Handle do GitHub, só da sessão. */
+  login: string | null;
   pokemon: Pokemon;
   role: PlayerRole;
   vote: CardValue | null;
   online: boolean;
+  /** Sockets vivos ligados a esta identidade (abas duplicadas compartilham assento). */
+  socketIds: Set<string>;
   joinedAt: number;
+  /** Carimbado quando `socketIds` esvazia. */
   lastSeenAt: number;
-}
-
-export interface SerializedPlayer extends Omit<Player, 'vote' | 'lastSeenAt'> {
-  vote: CardValue | 'HIDDEN' | null;
-}
-
-export interface RoomState {
-  id: string;
-  createdAt: number;
-  revealed: boolean;
-  cardSequence: CardValue[];
-  players: SerializedPlayer[];
-  topic?: string;
-}
-
-export type RoomErrorCode = 'NAME_TAKEN' | 'ROOM_FULL' | 'INVALID_NAME' | 'INVALID_POKEMON';
-
-export interface RoomError {
-  code: RoomErrorCode;
-  message: string;
 }

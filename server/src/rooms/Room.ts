@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid';
 import {
   CARD_SEQUENCE,
   type CardValue,
@@ -8,73 +9,150 @@ import {
   type SerializedPlayer,
 } from '../types/index.js';
 
+export interface UpsertInput {
+  /** Identidade autenticada e estável entre reconexões (`user:<id>`). */
+  identityKey: string;
+  socketId: string;
+  name: string;
+  /** Handle do GitHub; sempre da sessão, nunca do payload. */
+  login: string | null;
+  pokemon: Pokemon;
+  role: PlayerRole;
+  now: number;
+}
+
+export interface UpsertResult {
+  player: Player;
+  rebound: boolean;
+}
+
 export class Room {
   readonly id: string;
   readonly createdAt: number;
   revealed = false;
   topic?: string;
+
   private players = new Map<string, Player>();
+  private byIdentity = new Map<string, string>();
+  private bySocket = new Map<string, string>();
 
   constructor(id: string) {
     this.id = id;
     this.createdAt = Date.now();
   }
 
-  addPlayer(input: {
-    id: string;
-    name: string;
-    pokemon: Pokemon;
-    role: PlayerRole;
-  }): Player {
-    const now = Date.now();
+  /**
+   * Cria o jogador ou RELIGA a entrada existente. Religar preserva o voto e o
+   * `joinedAt` — é isso que faz F5 e reconexão não gerarem um assento novo.
+   *
+   * Com identidade autenticada, uma segunda aba é GARANTIDAMENTE a mesma
+   * pessoa, então o religamento nunca é recusado.
+   */
+  upsertPlayer(input: UpsertInput): UpsertResult {
+    const existingId = this.byIdentity.get(input.identityKey);
+    const existing = existingId ? this.players.get(existingId) : undefined;
+
+    if (existing) {
+      existing.name = input.name;
+      existing.login = input.login;
+      existing.pokemon = input.pokemon;
+      // O papel NÃO é aplicado no religamento: abrir uma segunda aba mandaria
+      // o valor do sessionStorage dela e, se fosse 'spectator', APAGARIA o voto
+      // em andamento. Papel tem API própria (`player:setRole`).
+      existing.online = true;
+      existing.lastSeenAt = input.now;
+      existing.socketIds.add(input.socketId);
+      this.bySocket.set(input.socketId, existing.id);
+      return { player: existing, rebound: true };
+    }
+
     const player: Player = {
-      id: input.id,
+      id: nanoid(12),
+      identityKey: input.identityKey,
       name: input.name,
+      login: input.login,
       pokemon: input.pokemon,
       role: input.role,
       vote: null,
       online: true,
-      joinedAt: now,
-      lastSeenAt: now,
+      socketIds: new Set([input.socketId]),
+      joinedAt: input.now,
+      lastSeenAt: input.now,
     };
     this.players.set(player.id, player);
-    return player;
+    this.byIdentity.set(player.identityKey, player.id);
+    this.bySocket.set(input.socketId, player.id);
+    return { player, rebound: false };
   }
 
-  removePlayer(playerId: string): void {
+  /**
+   * Desliga um socket. O jogador só vai a offline quando o ÚLTIMO socket dele
+   * some — abas duplicadas compartilham o assento sem derrubar uma à outra.
+   */
+  unbindSocket(socketId: string, now: number): { playerId: string; wentOffline: boolean } | null {
+    const playerId = this.bySocket.get(socketId);
+    if (!playerId) return null;
+    this.bySocket.delete(socketId);
+    const player = this.players.get(playerId);
+    if (!player) return null;
+    player.socketIds.delete(socketId);
+    if (player.socketIds.size > 0) return { playerId, wentOffline: false };
+    player.online = false;
+    player.lastSeenAt = now;
+    return { playerId, wentOffline: true };
+  }
+
+  removePlayer(playerId: string): boolean {
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    for (const socketId of player.socketIds) this.bySocket.delete(socketId);
+    if (this.byIdentity.get(player.identityKey) === playerId) {
+      this.byIdentity.delete(player.identityKey);
+    }
     this.players.delete(playerId);
+    return true;
   }
 
-  removeInactive(): number {
-    let removed = 0;
-    for (const [id, player] of this.players) {
-      if (!player.online) {
-        this.players.delete(id);
-        removed++;
-      }
+  /**
+   * Remoção automática dos offline. NÃO remove quem já votou: senão alguém que
+   * vota e fecha o notebook faria a média de todo mundo mudar sozinha no meio
+   * da rodada. Esses ficam pendentes e são limpos no `reset()`.
+   */
+  reapOffline(now: number, graceMs: number): string[] {
+    const removed: string[] = [];
+    for (const player of [...this.players.values()]) {
+      if (player.online) continue;
+      if (player.vote !== null) continue;
+      if (now - player.lastSeenAt < graceMs) continue;
+      this.removePlayer(player.id);
+      removed.push(player.id);
     }
     return removed;
   }
 
-  markOffline(playerId: string): void {
-    const player = this.players.get(playerId);
-    if (!player) return;
-    player.online = false;
-    player.lastSeenAt = Date.now();
+  /** Limpeza manual. `minOfflineMs` evita chutar quem está reconectando agora. */
+  removeInactive(now: number, minOfflineMs: number): string[] {
+    const removed: string[] = [];
+    for (const player of [...this.players.values()]) {
+      if (player.online) continue;
+      if (now - player.lastSeenAt < minOfflineMs) continue;
+      this.removePlayer(player.id);
+      removed.push(player.id);
+    }
+    return removed;
   }
 
   getPlayer(playerId: string): Player | undefined {
     return this.players.get(playerId);
   }
 
-  hasOnlinePlayerWithName(name: string): boolean {
-    const normalized = name.trim().toLowerCase();
-    for (const player of this.players.values()) {
-      if (player.online && player.name.trim().toLowerCase() === normalized) {
-        return true;
-      }
-    }
-    return false;
+  getPlayerBySocket(socketId: string): Player | undefined {
+    const playerId = this.bySocket.get(socketId);
+    return playerId ? this.players.get(playerId) : undefined;
+  }
+
+  allPlayers(): Player[] {
+    return [...this.players.values()];
   }
 
   setVote(playerId: string, value: CardValue): boolean {
@@ -87,8 +165,10 @@ export class Room {
     return true;
   }
 
-  reveal(): void {
+  reveal(): boolean {
+    if (this.revealed) return false;
     this.revealed = true;
+    return true;
   }
 
   reset(): void {
@@ -101,6 +181,8 @@ export class Room {
   setRole(playerId: string, role: PlayerRole): boolean {
     const player = this.players.get(playerId);
     if (!player) return false;
+    if (this.revealed) return false;
+    if (player.role === role) return false;
     player.role = role;
     if (role === 'spectator') {
       player.vote = null;
@@ -122,26 +204,33 @@ export class Room {
     return lastActivity || this.createdAt;
   }
 
-  serialize(): RoomState {
-    const players: SerializedPlayer[] = Array.from(this.players.values()).map((p) => {
+  /**
+   * Estado na perspectiva de UM espectador: ele vê o próprio voto sem máscara,
+   * o dos outros como 'HIDDEN' até o reveal. É isso que permite ao cliente
+   * confiar só no servidor para saber qual carta está selecionada.
+   */
+  serializeFor(viewerId: string | null): RoomState {
+    const players: SerializedPlayer[] = [];
+    for (const p of this.players.values()) {
       let vote: SerializedPlayer['vote'];
-      if (this.revealed) {
-        vote = p.vote;
-      } else if (p.vote === null) {
+      if (p.vote === null) {
         vote = null;
+      } else if (this.revealed || p.id === viewerId) {
+        vote = p.vote;
       } else {
         vote = 'HIDDEN';
       }
-      return {
+      players.push({
         id: p.id,
         name: p.name,
+        login: p.login,
         pokemon: p.pokemon,
         role: p.role,
         online: p.online,
         joinedAt: p.joinedAt,
         vote,
-      };
-    });
+      });
+    }
 
     return {
       id: this.id,

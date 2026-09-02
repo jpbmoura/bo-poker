@@ -32,7 +32,8 @@ export function SettingsDialog({ open, onClose, roomId, playerCount }: SettingsD
         </div>
 
         <p className="mt-6 text-xs text-subtle leading-relaxed">
-          Sem auth, sem persistência. Estado vive em memória enquanto a sala estiver ativa.
+          Login pelo GitHub identifica você na mesa. O estado das rodadas vive em
+          memória e some quando a sala esvazia.
         </p>
       </div>
     </Dialog>

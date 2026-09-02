@@ -4,6 +4,10 @@ import { nanoid } from 'nanoid';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
+import { LogOut } from 'lucide-react';
+import { signOut, useSession } from '../services/auth';
+import { disconnectSocket } from '../services/socket';
+import { normalizeRoomId } from '../types';
 
 const ROOM_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -26,6 +30,14 @@ function generateFriendlyRoomId(): string {
 export default function HomePage() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
+  const { data: session } = useSession();
+
+  // Fora de uma sala não há assento a liberar, então basta encerrar a sessão.
+  const handleSignOut = async () => {
+    disconnectSocket();
+    await signOut();
+    window.location.assign('/login');
+  };
 
   const handleCreate = () => {
     const id = generateFriendlyRoomId() || generateRoomId();
@@ -34,13 +46,38 @@ export default function HomePage() {
 
   const handleJoin = (e: FormEvent) => {
     e.preventDefault();
-    const trimmed = code.trim();
-    if (trimmed.length === 0) return;
-    navigate(`/room/${encodeURIComponent(trimmed)}`);
+    // Canonicaliza aqui tambem para "bo-poker 42" e "BOPOKER42" caírem na
+    // mesma sala. `encodeURIComponent` deixa de ser necessario: o id
+    // normalizado e sempre [A-Z0-9].
+    const id = normalizeRoomId(code);
+    if (!id) return;
+    navigate(`/room/${id}`);
   };
 
   return (
     <div className="min-h-screen bg-dot-grid flex flex-col items-center justify-center px-4">
+      {session && (
+        <div className="fixed top-4 right-4 z-20 flex items-center gap-3 animate-fade-in">
+          <div className="text-right leading-tight">
+            <div className="text-xs text-muted truncate max-w-[160px]">
+              {session.user.name}
+            </div>
+            {session.user.login && (
+              <div className="text-[10px] text-subtle font-mono truncate max-w-[160px]">
+                @{session.user.login}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handleSignOut}
+            title="Sair da conta"
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:text-danger hover:bg-danger-soft transition-colors active:scale-90"
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2.5 mb-12">
         <PokeballIcon size={22} className="text-brand" />
         <h1 className="text-xl font-semibold tracking-tight text-text">BO Poker</h1>

@@ -5,6 +5,7 @@ import { PlayerCard } from './PlayerCard';
 import { Confetti } from './Confetti';
 import { PokeballIcon } from './ui/PokeballIcon';
 import { cn } from '../utils/cn';
+import { eligibleVoters } from '../utils/stats';
 import type { SerializedPlayer } from '../types';
 
 interface PokerTableProps {
@@ -105,17 +106,37 @@ export function PokerTable({
 }: PokerTableProps) {
   const [charging, setCharging] = useState(false);
   const [flipReady, setFlipReady] = useState(false);
-  const [sorted, setSorted] = useState(false);
+  // Ordem e atrasos sao CONGELADOS no momento do reveal e indexados por id.
+  // Antes eram derivados do indice no array: quando a ordenacao entrava, todo
+  // `flipDelayMs` mudava no meio da animacao, invalidava o memo do PlayerCard e
+  // reiniciava a animacao dos Pokemon.
+  const [orderIds, setOrderIds] = useState<string[] | null>(null);
+  const [delayById, setDelayById] = useState<Record<string, number>>({});
   const [shaking, setShaking] = useState(false);
   const [glowing, setGlowing] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [confetti, setConfetti] = useState(false);
   const [verdict, setVerdict] = useState<Verdict>(null);
 
-  const prevRevealedRef = useRef(false);
+  // Entrar numa sala ja revelada nao deve reproduzir a coreografia inteira.
+  // `useState` (e nao `useRef` direto) porque o valor precisa ser estavel entre
+  // as duas invocacoes do StrictMode.
+  const [mountedMidReveal] = useState(revealed);
+  const skipChoreoRef = useRef(mountedMidReveal);
 
   const voters = useMemo(() => players.filter((p) => p.role === 'voter'), [players]);
   const spectators = useMemo(() => players.filter((p) => p.role === 'spectator'), [players]);
+
+  // Segunda fonte de churn: `enterDelayMs={idx * 60}` mudava para todos os cards
+  // a cada entrada/saida. Cada id recebe o atraso na primeira vez que aparece.
+  const enterDelaysRef = useRef(new Map<string, number>());
+  const enterDelayFor = (playerId: string, index: number): number => {
+    const known = enterDelaysRef.current.get(playerId);
+    if (known !== undefined) return known;
+    const delay = enterDelaysRef.current.size === 0 ? index * 60 : 0;
+    enterDelaysRef.current.set(playerId, delay);
+    return delay;
+  };
 
   // Snapshot refs read inside the reveal effect so it can depend ONLY on `revealed`
   // (player updates during the reveal won't tear down active timers).
@@ -127,26 +148,27 @@ export function PokerTable({
   outlierIdsRef.current = outlierIds;
 
   const displayedVoters = useMemo(() => {
-    if (!sorted) return voters;
-    return [...voters].sort((a, b) => voteRank(a) - voteRank(b));
-  }, [voters, sorted]);
-
-  // Center-out wave delays (in ms)
-  const flipDelays = useMemo(() => {
-    const n = displayedVoters.length;
-    if (n === 0) return [] as number[];
-    const center = (n - 1) / 2;
-    return displayedVoters.map((_, i) => Math.abs(i - center) * WAVE_STEP_MS);
-  }, [displayedVoters]);
+    if (!orderIds) return voters;
+    const rank = new Map(orderIds.map((id, i) => [id, i]));
+    // Quem entrou depois do congelamento vai para o fim, sem mexer nos demais.
+    return [...voters].sort(
+      (a, b) =>
+        (rank.get(a.id) ?? Number.POSITIVE_INFINITY) -
+        (rank.get(b.id) ?? Number.POSITIVE_INFINITY),
+    );
+  }, [voters, orderIds]);
 
   // Effect runs ONLY when `revealed` toggles. Player updates during the reveal
   // can't tear down the active timers — snapshot is read from refs at run time.
   useEffect(() => {
     if (!revealed) {
-      prevRevealedRef.current = false;
+      // Zera aqui (e so aqui) o atalho de "montei no meio do reveal": a partir
+      // da proxima rodada a coreografia roda inteira.
+      skipChoreoRef.current = false;
       setCharging(false);
       setFlipReady(false);
-      setSorted(false);
+      setOrderIds(null);
+      setDelayById({});
       setShaking(false);
       setGlowing(false);
       setCelebrating(false);
@@ -155,22 +177,42 @@ export function PokerTable({
       return;
     }
 
-    if (prevRevealedRef.current) return;
-    prevRevealedRef.current = true;
-
     // Snapshot at reveal moment
     const snapVoters = votersRef.current;
     const snapConsensus = consensusRef.current;
     const snapOutliers = outlierIdsRef.current;
+    const sortedIds = [...snapVoters]
+      .sort((a, b) => voteRank(a) - voteRank(b))
+      .map((p) => p.id);
+
+    // Chegou com a rodada ja revelada (F5 no meio do reveal, ou entrou depois):
+    // vai direto para o estado final. O ref NAO e limpo aqui de proposito --
+    // ficar setado a rodada inteira e o que faz as duas invocacoes do
+    // StrictMode tomarem o mesmo caminho idempotente.
+    if (skipChoreoRef.current) {
+      setOrderIds(sortedIds);
+      setDelayById({});
+      setCharging(false);
+      setFlipReady(true);
+      return;
+    }
+
     const voterCount = snapVoters.length;
     const center = (voterCount - 1) / 2;
-    const maxDelay = voterCount > 0
-      ? Math.max(...snapVoters.map((_, i) => Math.abs(i - center) * WAVE_STEP_MS))
-      : 0;
+    const delays: Record<string, number> = {};
+    let maxDelay = 0;
+    snapVoters.forEach((p, i) => {
+      const d = Math.abs(i - center) * WAVE_STEP_MS;
+      delays[p.id] = d;
+      if (d > maxDelay) maxDelay = d;
+    });
     const localTotalFlipMs = maxDelay + FLIP_BASE_MS;
     const flipEnd = PREP_MS + localTotalFlipMs;
-    const v = computeVerdict(snapVoters, snapConsensus, snapOutliers);
+    // Veredito so sobre quem conta na rodada: um fantasma que nunca votou nao
+    // pode alterar a leitura de convergencia.
+    const v = computeVerdict(eligibleVoters(snapVoters), snapConsensus, snapOutliers);
 
+    setDelayById(delays);
     setCharging(true);
 
     const timeouts: number[] = [];
@@ -178,7 +220,9 @@ export function PokerTable({
       setCharging(false);
       setFlipReady(true);
     }, PREP_MS));
-    timeouts.push(window.setTimeout(() => setSorted(true), flipEnd + 250));
+    // So a ORDEM muda no passo de ordenacao; `delayById` fica intacto, entao a
+    // prop flipDelayMs de cada card nao muda e nada reinicia.
+    timeouts.push(window.setTimeout(() => setOrderIds(sortedIds), flipEnd + 250));
     timeouts.push(window.setTimeout(() => setVerdict(v), flipEnd + 200));
 
     if (v === 'consensus') {
@@ -240,8 +284,8 @@ export function PokerTable({
                   player={player}
                   revealed={revealed}
                   isSelf={player.id === myPlayerId}
-                  flipDelayMs={flipDelays[idx] ?? 0}
-                  enterDelayMs={idx * 60}
+                  flipDelayMs={delayById[player.id] ?? 0}
+                  enterDelayMs={enterDelayFor(player.id, idx)}
                   shaking={shaking}
                   glowing={glowing}
                   charging={charging}
