@@ -12,6 +12,8 @@ import { updateUser, useSession } from '../services/auth';
 interface EntryDialogProps {
   open: boolean;
   roomId: string;
+  /** Null enquanto o prefetch nao respondeu; cai no codigo nesse caso. */
+  roomName: string | null;
   joining: boolean;
   connected: boolean;
   error: RoomError | null;
@@ -21,6 +23,7 @@ interface EntryDialogProps {
 export function EntryDialog({
   open,
   roomId,
+  roomName,
   joining,
   connected,
   error,
@@ -81,7 +84,9 @@ export function EntryDialog({
       <form onSubmit={handleSubmit} className="p-7">
         <div className="flex items-center gap-2 mb-1">
           <PokeballIcon size={16} className="text-brand" />
-          <h2 className="text-base font-semibold text-text">Entrar na sala</h2>
+          <h2 className="text-base font-semibold text-text">
+            {roomName ?? 'Entrar na sala'}
+          </h2>
         </div>
         <p className="text-xs text-subtle mb-6">
           <span className="font-mono">{roomId}</span>

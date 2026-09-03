@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RoomManagerImpl } from './RoomManager.js';
-import { normalizeRoomId } from '../types/index.js';
+import {
+  normalizeRoomId,
+  normalizeRoomName,
+  ROOM_NAME_MAX_LENGTH,
+} from '../types/index.js';
 import type { Pokemon } from '../types/index.js';
 
 const POKE: Pokemon = { id: 25, name: 'pikachu', sprite: 'p.png' };
@@ -99,4 +103,32 @@ test('sala com todo mundo offline e apagada ao vencer o TTL', () => {
 
   assert.equal(manager.sweep(T0 + 60_000, 45_000, 3_600_000).removedRooms, 0);
   assert.equal(manager.sweep(T0 + 3_700_000, 45_000, 3_600_000).removedRooms, 1);
+});
+
+test('getOrCreate hidrata os metadados na PRIMEIRA materializacao', () => {
+  const manager = new RoomManagerImpl();
+  const room = manager.getOrCreate('SALA', { name: 'Squad', ownerId: 'u1' });
+  assert.equal(room?.name, 'Squad');
+  assert.equal(room?.ownerId, 'u1');
+});
+
+test('sala ja viva ignora meta novo: quem esta dentro nao pode ter o dono trocado', () => {
+  const manager = new RoomManagerImpl();
+  manager.getOrCreate('SALA', { name: 'Squad', ownerId: 'u1' });
+  const again = manager.getOrCreate('SALA', { name: 'Outro', ownerId: 'u2' });
+  assert.equal(again?.name, 'Squad');
+  assert.equal(again?.ownerId, 'u1');
+});
+
+test('getOrCreate sem meta continua valido (caminho dos testes e do legado)', () => {
+  const manager = new RoomManagerImpl();
+  const room = manager.getOrCreate('SALA');
+  assert.equal(room?.name, 'SALA');
+  assert.equal(room?.ownerId, null);
+});
+
+test('normalizeRoomName colapsa espacos e corta no limite', () => {
+  assert.equal(normalizeRoomName('  Squad   BackOffice  '), 'Squad BackOffice');
+  assert.equal(normalizeRoomName(''), '');
+  assert.equal(normalizeRoomName('x'.repeat(80)).length, ROOM_NAME_MAX_LENGTH);
 });

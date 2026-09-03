@@ -6,9 +6,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // O Better Auth vive na :3001; sem este proxy o cliente chamaria
-      // /api/auth na própria :5173 e tomaria 404.
-      '/api/auth': {
+      // Toda a API vive na :3001 (/api/auth do Better Auth e /api/rooms).
+      // Sem este proxy o cliente chamaria a própria :5173 e o dev server
+      // devolveria index.html com 200 — o res.json() estoura com um erro de
+      // parse que não aponta para a causa.
+      '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },

@@ -12,4 +12,6 @@ export const Events = {
   ROOM_STATE: 'room:state',
   ROOM_JOINED: 'room:joined',
   ROOM_ERROR: 'room:error',
+  /** A sala deixou de existir (dono excluiu) enquanto a pessoa estava dentro. */
+  ROOM_CLOSED: 'room:closed',
 } as const;

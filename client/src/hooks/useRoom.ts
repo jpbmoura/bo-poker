@@ -8,6 +8,7 @@ import type {
   JoinedPayload,
   PlayerRole,
   Pokemon,
+  RoomClosedPayload,
   RoomError,
   RoomState,
 } from '../types';
@@ -23,6 +24,9 @@ const Events = {
   ROOM_STATE: 'room:state',
   ROOM_JOINED: 'room:joined',
   ROOM_ERROR: 'room:error',
+  // ATENÇÃO: este mapa é uma cópia de server/src/socket/events.ts e NADA testa a
+  // sincronia dos dois. Esquecer um nome aqui faz o listener nunca disparar.
+  ROOM_CLOSED: 'room:closed',
 } as const;
 
 const JOIN_TIMEOUT_MS = 10_000;
@@ -36,6 +40,7 @@ export function useRoom(roomId: string) {
   const setError = useRoomStore((s) => s.setError);
   const setJoined = useRoomStore((s) => s.setJoined);
   const setJoining = useRoomStore((s) => s.setJoining);
+  const setClosed = useRoomStore((s) => s.setClosed);
 
   const joinTimeoutRef = useRef<number | null>(null);
 
@@ -69,14 +74,26 @@ export function useRoom(roomId: string) {
       }
     };
 
+    // A sala deixou de existir. Só registra o fato: quem navega é a RoomPage,
+    // pelo mesmo motivo de `error` — o hook não conhece rotas.
+    const onClosed = (payload: RoomClosedPayload) => {
+      clearJoinTimeout();
+      setJoined(false);
+      setJoining(false);
+      setMyPlayerId(null);
+      setClosed(payload);
+    };
+
     socket.on(Events.ROOM_STATE, onState);
     socket.on(Events.ROOM_JOINED, onJoined);
     socket.on(Events.ROOM_ERROR, onError);
+    socket.on(Events.ROOM_CLOSED, onClosed);
 
     return () => {
       socket.off(Events.ROOM_STATE, onState);
       socket.off(Events.ROOM_JOINED, onJoined);
       socket.off(Events.ROOM_ERROR, onError);
+      socket.off(Events.ROOM_CLOSED, onClosed);
       clearJoinTimeout();
     };
   }, [
@@ -88,6 +105,7 @@ export function useRoom(roomId: string) {
     setJoined,
     setJoining,
     setError,
+    setClosed,
   ]);
 
   const emitJoin = useCallback(

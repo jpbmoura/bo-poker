@@ -1,4 +1,4 @@
-import { Room } from './Room.js';
+import { Room, type RoomMeta } from './Room.js';
 import { normalizeRoomId } from '../types/index.js';
 
 export interface SweepResult {
@@ -10,12 +10,17 @@ export interface SweepResult {
 export class RoomManagerImpl {
   private rooms = new Map<string, Room>();
 
-  getOrCreate(roomId: string): Room | undefined {
+  /**
+   * Materializa a sala em memória. O `meta` vem do Postgres e é OPCIONAL: quem
+   * chama já verificou que a sala existe, e uma sala viva nunca é recriada, então
+   * o metadado só importa na primeira materialização.
+   */
+  getOrCreate(roomId: string, meta?: RoomMeta): Room | undefined {
     const id = normalizeRoomId(roomId);
     if (!id) return undefined;
     let room = this.rooms.get(id);
     if (!room) {
-      room = new Room(id);
+      room = new Room(id, meta);
       this.rooms.set(id, room);
     }
     return room;

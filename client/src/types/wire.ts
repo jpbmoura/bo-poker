@@ -33,6 +33,14 @@ export interface SerializedPlayer {
 
 export interface RoomState {
   id: string;
+  /** Nome dado pelo dono. Persistido; viaja no estado para renomear ao vivo. */
+  name: string;
+  /**
+   * Se QUEM RECEBE este estado é o dono da sala. Calculado por espectador de
+   * propósito: o `ownerId` cru é um id de usuário do Better Auth e não precisa
+   * ser difundido para todo mundo na mesa.
+   */
+  isOwner: boolean;
   createdAt: number;
   revealed: boolean;
   cardSequence: CardValue[];
@@ -46,7 +54,9 @@ export type RoomErrorCode =
   | 'INVALID_POKEMON'
   | 'INVALID_ROOM'
   | 'NOT_IN_ROOM'
-  | 'SESSION_EXPIRED';
+  | 'SESSION_EXPIRED'
+  | 'ROOM_NOT_FOUND'
+  | 'ROOM_UNAVAILABLE';
 
 export interface RoomError {
   code: RoomErrorCode;
@@ -72,8 +82,20 @@ export interface JoinedPayload {
   role: PlayerRole;
 }
 
+/**
+ * server -> client `room:closed`
+ *
+ * A sala deixou de existir enquanto a pessoa estava dentro. Hoje só o dono
+ * excluindo produz isto, mas o `reason` deixa espaço para outros motivos.
+ */
+export interface RoomClosedPayload {
+  roomId: string;
+  reason: 'deleted';
+}
+
 export const ROOM_ID_MAX_LENGTH = 20;
 export const PLAYER_NAME_MAX_LENGTH = 32;
+export const ROOM_NAME_MAX_LENGTH = 40;
 
 /**
  * Canonicaliza o id da sala. Cliente e servidor DEVEM usar esta mesma função,
@@ -88,4 +110,12 @@ export function normalizeRoomId(raw: string): string | null {
 /** Normaliza o nome de exibição (cosmético; a identidade vem da sessão). */
 export function normalizePlayerName(raw: string): string {
   return (raw ?? '').trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Normaliza o nome da sala. Corta no limite em vez de rejeitar: o nome é
+ * cosmético e um `PATCH` recusado por um caractere a mais só irritaria.
+ */
+export function normalizeRoomName(raw: string): string {
+  return (raw ?? '').trim().replace(/\s+/g, ' ').slice(0, ROOM_NAME_MAX_LENGTH);
 }

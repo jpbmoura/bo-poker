@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link2, Settings, LogOut, Check, Eraser } from 'lucide-react';
+import { Link2, Settings, LogOut, Check, Eraser, Star } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { PokeballIcon } from './ui/PokeballIcon';
 
@@ -9,7 +9,9 @@ interface IconSidebarProps {
   onClearInactive: () => void;
   onLeave: () => void;
   onHome: () => void;
+  onToggleFavorite: () => void;
   hasInactive: boolean;
+  isFavorite: boolean;
 }
 
 export function IconSidebar({
@@ -18,7 +20,9 @@ export function IconSidebar({
   onClearInactive,
   onLeave,
   onHome,
+  onToggleFavorite,
   hasInactive,
+  isFavorite,
 }: IconSidebarProps) {
   const [copied, setCopied] = useState(false);
   const [cleared, setCleared] = useState(false);
@@ -67,6 +71,19 @@ export function IconSidebar({
         ) : (
           <Link2 size={16} />
         )}
+      </SidebarButton>
+
+      {/* Aqui o ícone É o estado (preenchido vs. contorno), então não precisa do
+          swap para Check que os outros botões usam como feedback. */}
+      <SidebarButton
+        onClick={onToggleFavorite}
+        title={isFavorite ? 'Remover dos favoritos' : 'Favoritar sala'}
+      >
+        <Star
+          size={16}
+          fill={isFavorite ? 'currentColor' : 'none'}
+          className={cn(isFavorite && 'text-highlight')}
+        />
       </SidebarButton>
 
       <SidebarButton

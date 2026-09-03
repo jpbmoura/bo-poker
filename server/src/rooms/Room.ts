@@ -21,6 +21,12 @@ export interface UpsertInput {
   now: number;
 }
 
+/** Metadados vindos do Postgres quando a sala é materializada em memória. */
+export interface RoomMeta {
+  name?: string;
+  ownerId?: string | null;
+}
+
 export interface UpsertResult {
   player: Player;
   rebound: boolean;
@@ -31,14 +37,20 @@ export class Room {
   readonly createdAt: number;
   revealed = false;
   topic?: string;
+  /** Nome persistido. Cai no id quando a sala é materializada sem metadados. */
+  name: string;
+  /** Id do usuário dono. Null só no caminho de teste, que não passa `meta`. */
+  ownerId: string | null;
 
   private players = new Map<string, Player>();
   private byIdentity = new Map<string, string>();
   private bySocket = new Map<string, string>();
 
-  constructor(id: string) {
+  constructor(id: string, meta?: RoomMeta) {
     this.id = id;
     this.createdAt = Date.now();
+    this.name = meta?.name ?? id;
+    this.ownerId = meta?.ownerId ?? null;
   }
 
   /**
@@ -205,6 +217,17 @@ export class Room {
   }
 
   /**
+   * O espectador é o dono da sala? Compara pela `identityKey` do jogador em vez
+   * de devolver o `ownerId` cru: o estado vai para TODA a mesa, e o id de
+   * usuário de outra pessoa não tem por que circular.
+   */
+  private isOwnerViewer(viewerId: string | null): boolean {
+    if (!this.ownerId || !viewerId) return false;
+    const viewer = this.players.get(viewerId);
+    return viewer?.identityKey === `user:${this.ownerId}`;
+  }
+
+  /**
    * Estado na perspectiva de UM espectador: ele vê o próprio voto sem máscara,
    * o dos outros como 'HIDDEN' até o reveal. É isso que permite ao cliente
    * confiar só no servidor para saber qual carta está selecionada.
@@ -234,6 +257,8 @@ export class Room {
 
     return {
       id: this.id,
+      name: this.name,
+      isOwner: this.isOwnerViewer(viewerId),
       createdAt: this.createdAt,
       revealed: this.revealed,
       cardSequence: CARD_SEQUENCE,

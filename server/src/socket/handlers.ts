@@ -3,6 +3,7 @@ import { fromNodeHeaders } from 'better-auth/node';
 import { auth } from '../auth.js';
 import { Events } from './events.js';
 import { RoomManager } from '../rooms/RoomManager.js';
+import * as roomStore from '../rooms/roomStore.js';
 import type { Room } from '../rooms/Room.js';
 import { getForcedPokemon } from '../utils/forcedPokemon.js';
 import { config } from '../config.js';
@@ -129,7 +130,7 @@ export function registerSocketHandlers(io: Server): void {
   io.on('connection', (socket: Socket) => {
     const data = socket.data as SocketData;
 
-    socket.on(Events.ROOM_JOIN, (payload: JoinPayload) => {
+    socket.on(Events.ROOM_JOIN, async (payload: JoinPayload) => {
       // Toda a validação acontece ANTES do getOrCreate: um join rejeitado não
       // pode deixar uma sala vazia ocupando memória.
       if (!payload || typeof payload.roomId !== 'string') {
@@ -161,17 +162,58 @@ export function registerSocketHandlers(io: Server): void {
       }
       const now = Date.now();
 
+      // A sala precisa ser RESOLVIDA antes de desligar o jogador da anterior.
+      // Invertido, um código inexistente expulsaria a pessoa da mesa onde ela
+      // estava só para depois falhar.
+      let room = RoomManager.get(roomId);
+
+      // Sala já viva em memória NÃO consulta o banco. É isso que mantém a
+      // invariante do projeto: uma oscilação do Postgres não pode impedir
+      // reconexão, F5 ou gente nova entrando numa rodada em andamento.
+      if (!room) {
+        let record;
+        try {
+          record = await roomStore.findById(roomId);
+        } catch (err) {
+          console.error('[room:join] banco indisponível:', (err as Error).message);
+          emitError(socket, {
+            code: 'ROOM_UNAVAILABLE',
+            message: 'Não foi possível verificar a sala. Tente de novo em instantes.',
+          });
+          return;
+        }
+        if (!record) {
+          // Distinto de ROOM_UNAVAILABLE de propósito: só aqui a sala de fato
+          // não existe.
+          emitError(socket, {
+            code: 'ROOM_NOT_FOUND',
+            message: 'Essa sala não existe ou foi encerrada.',
+          });
+          return;
+        }
+        room = RoomManager.getOrCreate(roomId, {
+          name: record.name,
+          ownerId: record.ownerId,
+        });
+      }
+
+      if (!room) {
+        emitError(socket, { code: 'INVALID_ROOM', message: 'Sala inválida.' });
+        return;
+      }
+
+      // O socket pode ter caído durante o await do banco. O handler de
+      // 'disconnect' já rodou, e naquele momento `data.roomId` ainda estava
+      // vazio — então ele não fez nada. Seguir daqui criaria um jogador
+      // `online: true` amarrado a um socket morto, e esse jogador seria
+      // INCOLETÁVEL: `reapOffline` pula quem está online e `allOfflineSince()`
+      // devolve null, então nem a graça nem o TTL da sala o alcançariam.
+      if (!socket.connected) return;
+
       // Trocar de sala pela URL não desmonta a página no cliente: sem isto o
       // jogador ficaria online para sempre na sala anterior, que nunca seria
       // coletada.
       const previous = data.roomId !== roomId ? detachFromRoom(socket, now) : null;
-
-      const room = RoomManager.getOrCreate(roomId);
-      if (!room) {
-        emitError(socket, { code: 'INVALID_ROOM', message: 'Sala inválida.' });
-        if (previous) broadcastRoomState(io, previous);
-        return;
-      }
 
       // Override de pokémon para nomes forçados, independente do que o cliente enviou.
       const finalPokemon = getForcedPokemon(name) ?? payload.pokemon;

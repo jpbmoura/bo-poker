@@ -231,3 +231,43 @@ test('getPlayerBySocket acompanha o religamento', () => {
   join(room, 'Alice', 's2', { now: T0 + 100 });
   assert.equal(room.getPlayerBySocket('s2')?.id, first.player.id);
 });
+
+// --- metadados persistidos: nome e dono ---
+
+test('sem meta, o nome cai no proprio id e nao ha dono', () => {
+  const room = new Room('SALA');
+  assert.equal(room.name, 'SALA');
+  assert.equal(room.ownerId, null);
+  assert.equal(room.serializeFor(null).name, 'SALA');
+});
+
+test('meta hidrata nome e dono e o nome viaja no estado', () => {
+  const room = new Room('SALA', { name: 'Squad BackOffice', ownerId: 'u1' });
+  const r = join(room, 'Alice', 's1', { userId: 'u1' });
+  assert.equal(room.serializeFor(r.player.id).name, 'Squad BackOffice');
+});
+
+test('isOwner e calculado POR ESPECTADOR e o ownerId nao vaza no wire', () => {
+  const room = new Room('SALA', { name: 'Squad', ownerId: 'u1' });
+  const dono = join(room, 'Alice', 's1', { userId: 'u1' });
+  const outro = join(room, 'Bob', 's2', { userId: 'u2' });
+
+  assert.equal(room.serializeFor(dono.player.id).isOwner, true);
+  assert.equal(room.serializeFor(outro.player.id).isOwner, false);
+
+  // O id do dono nao pode aparecer em lugar nenhum do payload: o estado vai
+  // para TODA a mesa.
+  assert.equal(JSON.stringify(room.serializeFor(outro.player.id)).includes('u1'), false);
+});
+
+test('sala sem dono nunca reporta isOwner', () => {
+  const room = new Room('SALA');
+  const r = join(room, 'Alice', 's1', { userId: 'u1' });
+  assert.equal(room.serializeFor(r.player.id).isOwner, false);
+});
+
+test('espectador desconhecido nao e dono', () => {
+  const room = new Room('SALA', { name: 'Squad', ownerId: 'u1' });
+  join(room, 'Alice', 's1', { userId: 'u1' });
+  assert.equal(room.serializeFor('id-que-nao-existe').isOwner, false);
+});

@@ -2,20 +2,25 @@
 
 Scrum Poker para o time de **BackOffice**, com tema Pokémon discreto e dark mode.
 
-Inspirado no fluxo do [ScrumJam](https://www.scrumjam.app/poker/). Login pelo GitHub identifica cada jogador; o estado das rodadas vive em memória no servidor enquanto a sala estiver ativa.
+Inspirado no fluxo do [ScrumJam](https://www.scrumjam.app/poker/). Login pelo GitHub identifica cada jogador. As **salas são persistidas** no Postgres (código, nome, dono e favoritos); o **estado das rodadas** continua vivendo em memória no servidor enquanto a sala estiver ativa.
 
 ---
 
 ## Funcionalidades (MVP)
 
-- Criar sala e entrar via código (URL compartilhável).
+- **Salas persistidas**: criar uma sala grava no banco. O link não expira e o código só deixa de funcionar quando o dono exclui.
+- **Home como painel**: depois do login, as salas que você criou ou favoritou aparecem em cards com nome, código e quantas pessoas estão online agora. Coroa dourada no canto quando você é o dono.
+- **Dono da sala**: quem cria pode renomear, excluir e copiar o link. Poderes de rodada (revelar, nova rodada, limpar inativos) seguem abertos a todos.
+- **Favoritos**: qualquer pessoa favorita uma sala pela estrela e ela passa a aparecer na home dela.
+- Excluir a sala expulsa quem estiver dentro na hora, com aviso.
+- Entrar via código (URL compartilhável). Código inexistente mostra "Sala não encontrada" em vez de criar uma sala nova.
 - Dialog de entrada: nome + 8 Pokémon aleatórios da 1ª geração (PokéAPI).
 - Votação com revelação simultânea (cartas viradas com flip 3D em stagger).
 - Modo espectador (não vota, só observa).
 - Botão **copiar link** da sala.
 - Estatísticas após reveal: média, moda, indicador de consenso.
 - Animação **"✨ Super efetivo!"** quando há consenso numérico.
-- Qualquer jogador pode revelar / iniciar nova rodada.
+- Qualquer jogador pode revelar / iniciar nova rodada — inclusive quem não é dono.
 - Jogadores desconectados ficam offline na lista e são removidos sozinhos após um período de graça (padrão 45 s). Quem já votou só é removido depois da rodada terminar, para a média não mudar sozinha no meio dela.
 - Reconectar ou dar F5 devolve o mesmo assento, com o voto preservado — não cria jogador duplicado.
 
@@ -25,7 +30,7 @@ Inspirado no fluxo do [ScrumJam](https://www.scrumjam.app/poker/). Login pelo Gi
 
 **Frontend** (`client/`): React 18, Vite, TypeScript, TailwindCSS, Zustand, React Router v6, socket.io-client.
 
-**Backend** (`server/`): Node 20+, Express, Socket.io, TypeScript. Estado em memória (`Map<string, Room>`).
+**Backend** (`server/`): Node 20+, Express, Socket.io, TypeScript. Metadados das salas no Postgres; estado das rodadas em memória (`Map<string, Room>`).
 
 **Monorepo**: pnpm workspaces (`pnpm-workspace.yaml`).
 
@@ -110,17 +115,18 @@ bo-poker/
 ├── client/                # SPA React/Vite
 │   └── src/
 │       ├── pages/         # HomePage, RoomPage
-│       ├── components/    # EntryDialog, PokerTable, PlayerCard, CardDeck, ...
+│       ├── components/    # EntryDialog, PokerTable, PlayerCard, CardDeck, RoomCard, ...
 │       ├── store/         # zustand
 │       ├── hooks/         # useSocket, useRoom
-│       ├── services/      # socket singleton, pokeapi
+│       ├── services/      # socket singleton, pokeapi, rooms (REST)
 │       ├── utils/         # stats, cn
 │       └── types/         # tipos espelhados do server
 ├── server/                # Express + Socket.io
 │   └── src/
 │       ├── index.ts
 │       ├── config.ts
-│       ├── rooms/         # Room, RoomManager (singleton)
+│       ├── rooms/         # Room, RoomManager (singleton), roomStore (SQL)
+│       ├── routes/        # rooms.ts (API HTTP de salas)
 │       ├── socket/        # handlers, events
 │       └── types/
 └── scripts/
@@ -150,12 +156,38 @@ bo-poker/
 | `room:state`       | `RoomState` (enviado a cada mudança, **por espectador**) |
 | `room:joined`      | `{ playerId, role }`   |
 | `room:error`       | `{ code, message }`    |
+| `room:closed`      | `{ roomId, reason }` — o dono excluiu a sala; quem está dentro é mandado para a home |
+
+O `RoomState` carrega `name` e `isOwner`. O `isOwner` é calculado **por espectador** (comparando a `identityKey` de quem recebe com o dono) em vez de mandar o `ownerId` cru: o estado vai para toda a mesa, e o id de usuário de outra pessoa não precisa circular.
+
+O `room:join` **exige que a sala exista**. Um código desconhecido devolve `ROOM_NOT_FOUND`; se o banco estiver fora do ar, devolve `ROOM_UNAVAILABLE` — são coisas diferentes de propósito (ver *Decisões*).
 
 Antes do reveal, o campo `vote` de cada jogador é mascarado: `null` se ainda não votou, `'HIDDEN'` se votou, e o valor real só aparece quando `revealed === true`.
 
 O estado é serializado **na perspectiva de quem recebe** (`Room.serializeFor`): cada jogador vê o próprio voto sem máscara, o dos outros como `'HIDDEN'`. Por isso o `room:state` sai socket a socket em vez de um broadcast único — e o cliente não precisa de nenhum estado otimista para saber qual carta está selecionada.
 
 **O `room:join` não carrega identidade.** Quem é o jogador vem da sessão autenticada do socket: o handshake passa por um `io.use()` que valida o cookie do Better Auth e coloca o usuário em `socket.data`. `name` e `pokemon` são cosméticos e validados; `identityKey` e `login` só a sessão define. Toda autorização passa por `requireMember`, que também recusa sessão expirada — o `io.use()` roda uma vez só, no handshake.
+
+---
+
+## API HTTP de salas
+
+Tudo sob `/api/rooms`, autenticado pelo mesmo cookie de sessão do Better Auth. As mutações exigem `Origin` confiável (a mesma lista dos `trustedOrigins`).
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET`    | `/api/rooms` | Salas que eu criei **ou** favoritei |
+| `POST`   | `/api/rooms` | Cria (gera o código, dono = sessão) |
+| `GET`    | `/api/rooms/:id` | Uma sala; `404` se não existir |
+| `PATCH`  | `/api/rooms/:id` | Renomeia; `403` se não for dono |
+| `DELETE` | `/api/rooms/:id` | Exclui e expulsa quem está dentro; `403` se não for dono |
+| `PUT`/`DELETE` | `/api/rooms/:id/favorite` | Favorita / desfavorita |
+
+Erro de banco responde **503**, nunca 404 — a diferença importa (ver a decisão logo abaixo).
+
+O `onlineCount` de cada sala vem da **memória** (`RoomManager`), não do banco: o Express roda no mesmo processo do estado das rodadas. A home revalida na montagem e no `focus` da janela; não existe canal de presença no socket.
+
+> **Ordem de montagem no `index.ts`**: `/api/auth` → `express.json()` → `/api/rooms` → fallback de SPA. O router precisa vir antes do `app.get('*')`, senão só o **GET** `/api/rooms` seria engolido (devolvendo `index.html` com 200) enquanto POST/PATCH/DELETE seguiriam funcionando — uma falha invisível em dev, porque o proxy do Vite a esconde. Verifique com `curl -i http://localhost:3001/api/rooms` **contra o build de produção**.
 
 ---
 
@@ -167,7 +199,12 @@ O estado é serializado **na perspectiva de quem recebe** (`Room.serializeFor`):
 - **Nome de exibição**: vem do GitHub (só o primeiro nome), é editável e fica salvo **na conta** via `authClient.updateUser`, então segue a pessoa entre salas e máquinas. Dois jogadores podem ter o mesmo nome — o `@handle` do GitHub aparece no tooltip do card para desambiguar.
 - **Saída deliberada vs. queda**: sair pelo botão ou trocar de sala pela URL libera o assento na hora; só desconexão involuntária passa pelo período de graça.
 - **Cleanup**: uma varredura a cada `PLAYER_SWEEP_INTERVAL_MS` (padrão 10 s) remove jogadores offline há mais de `PLAYER_GRACE_MS` (padrão 45 s), apaga salas que esvaziaram e as que passaram do TTL com todo mundo offline. A política vive em métodos puros com relógio injetado (`Room.reapOffline`, `RoomManager.sweep`); só o agendamento fica no `index.ts`.
-- **Autorização**: `requireMember` exige que o socket seja membro atual da sala para votar, revelar, resetar ou limpar inativos. Qualquer membro pode fazer todas essas ações — não existe conceito de host.
+- **Salas persistidas, rodadas efêmeras**: o Postgres guarda o *cadastro* da sala (código, nome, dono, favoritos); a `Map<string, Room>` guarda a *rodada*. O sweep continua coletando a sala da memória quando ela esvazia — e isso agora é uma melhoria, não uma perda: o link continua valendo para sempre, e no próximo join o nome e o dono são relidos do banco. Consequência: o campo `rooms` do `/health` significa "salas **ativas** em memória", não "salas existentes".
+- **Banco fora do ar nunca vira "sala não existe"**: o `room:join` resolve a sala **da memória primeiro** e só consulta o Postgres quando ela não está viva. Duas coisas saem disso: uma oscilação do banco não impede reconexão, F5 nem gente nova entrando numa rodada em andamento (mesma regra do `/health` e do `pool.on('error')`); e uma falha de consulta devolve `ROOM_UNAVAILABLE`, não `ROOM_NOT_FOUND` — quem ouve "não encontrada" cria uma sala duplicada e fragmenta o time. O preço aceito: com o banco fora, salas frias não abrem.
+- **O `room:join` resolve a sala ANTES de soltar a anterior.** Invertido — que era a ordem antiga, inofensiva quando toda sala era criada sob demanda — um código inexistente expulsaria a pessoa da mesa onde ela estava só para depois falhar.
+- **Guarda de `socket.connected` depois do `await` do banco.** O handler de join virou assíncrono, e o socket pode cair no meio. Sem a guarda, o `upsertPlayer` criaria um jogador `online: true` preso a um socket morto — e ele seria **incoletável**, porque `reapOffline` pula quem está online e `allOfflineSince()` devolve `null`. Vazamento permanente de sala.
+- **O dono é só do cadastro.** Renomear, excluir e copiar link são dele; revelar, nova rodada e limpar inativos continuam de todos. A mesa segue horizontal — o dono existe para a sala ter nome e alguém poder apagá-la, não para mandar na rodada.
+- **Autorização**: `requireMember` exige que o socket seja membro atual da sala para votar, revelar, resetar ou limpar inativos. Qualquer membro pode fazer todas essas ações: o dono da sala **não** tem poder extra sobre a rodada.
 - **Animações**: mistura de CSS puro (`@keyframes` + classes do Tailwind config) e **framer-motion** (`PokerTable`, `PlayerCard`, `Confetti`).
 - **Card flip**: 3D real com `transform: rotateY(180deg)` + `backface-visibility: hidden`, em onda center-out com passo de 120 ms (`WAVE_STEP_MS`).
 - **Coreografia do reveal**: a ordem das cartas e os atrasos são congelados por id de jogador no instante do reveal (`orderIds` + `delayById`). Derivá-los do índice no array fazia todo atraso mudar quando a ordenação entrava, reiniciando a animação dos Pokémon no meio. Quem entra com a rodada já revelada pula direto para o estado final, sem repetir a coreografia.
@@ -180,7 +217,7 @@ Todas opcionais.
 
 | Variável | Padrão | Para que serve |
 |---|---|---|
-| `DATABASE_URL` | — | **Obrigatória.** Postgres do Better Auth (usuário/sessão apenas) |
+| `DATABASE_URL` | — | **Obrigatória.** Postgres: usuário/sessão do Better Auth **e** o cadastro das salas |
 | `BETTER_AUTH_SECRET` | — | **Obrigatória.** `openssl rand -base64 32` |
 | `BETTER_AUTH_URL` | `http://localhost:3001` | URL do **servidor**, não do browser (ver abaixo) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | — | **Obrigatórias.** OAuth App do GitHub |
@@ -253,6 +290,8 @@ pnpm db:up        # sobe o Postgres do docker-compose
 pnpm db:migrate   # aplica server/migrations/*.sql
 ```
 
+Tabelas: `user`, `session`, `account`, `verification` (do Better Auth, em `0001_auth_init.sql`) e `room` + `room_favorite` (em `0002_rooms.sql`). O código da sala é a própria PK de `room`; `ownerId` e os favoritos referenciam `user` com `on delete cascade`.
+
 Para regenerar o schema depois de mexer na config do Better Auth (a CLI exige Node ≥ 22; o runtime do projeto segue no 20):
 
 ```bash
@@ -283,7 +322,9 @@ ENABLE_DEV_PASSWORD_AUTH=true PLAYER_GRACE_MS=1500 PLAYER_SWEEP_INTERVAL_MS=250 
 PLAYER_GRACE_MS=1500 pnpm smoke
 ```
 
-Cada cliente do smoke faz sign-up por e-mail/senha na API real para obter um cookie de sessão assinado — inserir linhas no Postgres não bastaria, porque o cookie é assinado com o secret.
+Cada cliente do smoke faz sign-up por e-mail/senha na API real para obter um cookie de sessão assinado — inserir linhas no Postgres não bastaria, porque o cookie é assinado com o secret. O script também **cria as salas pela API** (`POST /api/rooms`): desde que sala precisa existir para ser jogável, entrar num id inventado não funciona mais.
+
+Além do fluxo de rodada, o smoke cobre: `ROOM_NOT_FOUND` em sala inexistente, join recusado não expulsar da sala anterior, renomear ao vivo via `room:state`, `403` para não-dono em renomear/excluir, favoritar aparecendo na listagem e `room:closed` chegando a quem estava dentro quando o dono exclui.
 
 O script `scripts/smoke.mjs` usa o `socket.io-client` instalado como devDependency da raiz do workspace.
 
@@ -291,4 +332,4 @@ O script `scripts/smoke.mjs` usa o `socket.io-client` instalado como devDependen
 
 ## Não-objetivos
 
-Sem persistência de rodadas, histórico, exportação, timer ou modo claro. O Postgres guarda apenas usuário/sessão — nenhuma sala é persistida. Sem libs pesadas de UI. O tema Pokémon é uma **camada sutil** — vibe Linear/Vercel com acentos da PokéBola, não Game Boy.
+Sem persistência de **rodadas**, histórico, exportação, timer ou modo claro. O Postgres guarda usuário/sessão **e o cadastro das salas** (código, nome, dono, favoritos) — os votos e o estado da mesa continuam só em memória. Sem transferência de propriedade, sem sala privada, sem limite de salas por usuário. Sem libs pesadas de UI. O tema Pokémon é uma **camada sutil** — vibe Linear/Vercel com acentos da PokéBola, não Game Boy.

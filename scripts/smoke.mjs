@@ -1,7 +1,8 @@
 import { io } from 'socket.io-client';
 
 const URL = process.env.URL || 'http://localhost:3001';
-const ROOM = 'SMOKE' + Math.floor(Math.random() * 100000);
+let ROOM;
+let ROOM2;
 
 // O servidor precisa rodar com a graca curta, senao o cenario de remocao
 // levaria 45s:
@@ -34,6 +35,33 @@ async function signUp(label) {
   const cookies = res.headers.getSetCookie();
   if (!cookies?.length) throw new Error(`sign-up de ${label} nao devolveu cookie`);
   return cookies.map((c) => c.split(';')[0]).join('; ');
+}
+
+/**
+ * Sala agora PRECISA existir no banco para ser jogavel, entao o smoke cria a
+ * dele pela API real. O header Origin e obrigatorio duas vezes: pela protecao
+ * de CSRF do Better Auth e pelo requireTrustedOrigin do router de salas.
+ */
+async function apiCreateRoom(cookie, name) {
+  const res = await fetch(`${URL}/api/rooms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: URL, Cookie: cookie },
+    body: JSON.stringify({ name: name ?? '' }),
+  });
+  if (!res.ok) {
+    throw new Error(`criacao de sala falhou (${res.status}): ${await res.text()}`);
+  }
+  return res.json();
+}
+
+async function api(method, path, cookie, body) {
+  const res = await fetch(`${URL}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Origin: URL, Cookie: cookie },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  const text = await res.text();
+  return { status: res.status, body: text ? JSON.parse(text) : null };
 }
 
 const samplePokemon = (name, id) => ({
@@ -117,6 +145,17 @@ const playerOf = (client, playerId) =>
   const cookieA = await signUp('Alice');
   const cookieB = await signUp('Bob');
   const cookieC = await signUp('Carol');
+
+  // Alice e a dona das duas salas.
+  const created = await apiCreateRoom(cookieA, 'Sala do Smoke');
+  ROOM = created.id;
+  ROOM2 = (await apiCreateRoom(cookieA, 'Sala Secundaria')).id;
+  expect(created.isOwner === true, 'quem cria a sala vira dona');
+  expect(created.name === 'Sala do Smoke', 'sala nasce com o nome enviado');
+
+  // Sala que nunca foi criada nao existe mais -- e a mudanca central do feature.
+  const ghost = await api('GET', '/api/rooms/NAOEXISTE', cookieA);
+  expect(ghost.status === 404, 'GET de sala inexistente devolve 404');
 
   const a = await makeClient('Alice', { pokeId: 25, cookie: cookieA });
   const b = await makeClient('Bob', { pokeId: 6, cookie: cookieB });
@@ -247,7 +286,7 @@ const playerOf = (client, playerId) =>
 
   // --- trocar de sala nao deixa orfao na anterior ---
   lower.socket.emit('room:join', {
-    roomId: ROOM + 'X',
+    roomId: ROOM2,
     name: 'Dave',
     role: 'voter',
     pokemon: samplePokemon('dave', 4),
@@ -256,6 +295,66 @@ const playerOf = (client, playerId) =>
   expect(
     a.state.players.length === 2,
     'trocar de sala remove o jogador da sala anterior',
+  );
+
+  // --- sala precisa existir para ser jogavel ---
+  const ghostErr = await new Promise((resolve) => {
+    a.socket.once('room:error', resolve);
+    a.socket.emit('room:join', {
+      roomId: 'NAOEXISTE',
+      name: 'Alice',
+      role: 'voter',
+      pokemon: samplePokemon('alice', 25),
+    });
+    setTimeout(() => resolve(null), 2000);
+  });
+  expect(ghostErr?.code === 'ROOM_NOT_FOUND', 'join em sala inexistente da ROOM_NOT_FOUND');
+  expect(
+    a.state.players.length === 2,
+    'join recusado NAO expulsa quem ja estava na sala anterior',
+  );
+
+  // --- so o dono renomeia, e o nome novo chega na mesa ---
+  const forbidden = await api('PATCH', `/api/rooms/${ROOM}`, cookieC, { name: 'Hack' });
+  expect(forbidden.status === 403, 'nao-dono nao consegue renomear (403)');
+
+  const renamed = await api('PATCH', `/api/rooms/${ROOM}`, cookieA, { name: 'Squad BO' });
+  expect(renamed.status === 200, 'dono renomeia a sala');
+  await sleep(250);
+  expect(c.state?.name === 'Squad BO', 'nome novo chega ao vivo por room:state');
+  expect(c.state?.isOwner === false, 'quem nao e dono recebe isOwner false');
+  expect(a.state?.isOwner === true, 'a dona recebe isOwner true');
+
+  // --- favoritar ---
+  const fav = await api('PUT', `/api/rooms/${ROOM}/favorite`, cookieC);
+  expect(fav.status === 204, 'favoritar devolve 204');
+  const listC = await api('GET', '/api/rooms', cookieC);
+  const favRow = listC.body.find((r) => r.id === ROOM);
+  expect(
+    favRow?.isFavorite === true && favRow?.isOwner === false,
+    'sala favoritada aparece na home de quem nao e dono',
+  );
+  expect(favRow?.onlineCount >= 1, 'onlineCount reflete a memoria do servidor');
+
+  // --- excluir expulsa todo mundo ---
+  const closedPromise = new Promise((resolve) => {
+    c.socket.once('room:closed', resolve);
+    setTimeout(() => resolve(null), 2000);
+  });
+  const forbiddenDel = await api('DELETE', `/api/rooms/${ROOM}`, cookieC);
+  expect(forbiddenDel.status === 403, 'nao-dono nao consegue excluir (403)');
+
+  const del = await api('DELETE', `/api/rooms/${ROOM}`, cookieA);
+  expect(del.status === 204, 'dono exclui a sala');
+  const closedMsg = await closedPromise;
+  expect(closedMsg?.roomId === ROOM, 'quem estava dentro recebe room:closed');
+
+  const gone = await api('GET', `/api/rooms/${ROOM}`, cookieA);
+  expect(gone.status === 404, 'sala excluida some do banco');
+  const listCAfter = await api('GET', '/api/rooms', cookieC);
+  expect(
+    !listCAfter.body.some((r) => r.id === ROOM),
+    'sala excluida some tambem dos favoritos de quem favoritou',
   );
 
   a.socket.disconnect();

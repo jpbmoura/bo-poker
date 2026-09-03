@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import type { Pokemon, PlayerRole, RoomError, RoomState } from '../types';
+import type {
+  Pokemon,
+  PlayerRole,
+  RoomClosedPayload,
+  RoomError,
+  RoomState,
+} from '../types';
 
 interface RoomStoreState {
   roomState: RoomState | null;
@@ -10,6 +16,9 @@ interface RoomStoreState {
   joining: boolean;
   joined: boolean;
   error: RoomError | null;
+  /** A sala foi excluída enquanto a pessoa estava dentro. A navegação fica na
+   *  RoomPage, igual ao `error` — o hook só registra o fato. */
+  closed: RoomClosedPayload | null;
 
   setRoomState: (state: RoomState | null) => void;
   setMyPlayerId: (id: string | null) => void;
@@ -18,6 +27,7 @@ interface RoomStoreState {
   setJoining: (joining: boolean) => void;
   setJoined: (joined: boolean) => void;
   setError: (error: RoomError | null) => void;
+  setClosed: (closed: RoomClosedPayload | null) => void;
   reset: () => void;
 }
 
@@ -30,6 +40,7 @@ export const useRoomStore = create<RoomStoreState>((set) => ({
   joining: false,
   joined: false,
   error: null,
+  closed: null,
 
   setRoomState: (roomState) => set({ roomState }),
   setMyPlayerId: (myPlayerId) => set({ myPlayerId }),
@@ -39,6 +50,7 @@ export const useRoomStore = create<RoomStoreState>((set) => ({
   setJoining: (joining) => set({ joining }),
   setJoined: (joined) => set({ joined }),
   setError: (error) => set({ error }),
+  setClosed: (closed) => set({ closed }),
   reset: () =>
     set({
       roomState: null,
@@ -49,5 +61,6 @@ export const useRoomStore = create<RoomStoreState>((set) => ({
       joining: false,
       joined: false,
       error: null,
+      closed: null,
     }),
 }));

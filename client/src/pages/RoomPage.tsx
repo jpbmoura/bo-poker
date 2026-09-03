@@ -18,6 +18,13 @@ import { clearSession, readSession } from '../services/session';
 import { signOut, useSession } from '../services/auth';
 import { disconnectSocket } from '../services/socket';
 import { normalizeRoomId } from '../types';
+import {
+  deleteRoom,
+  getRoom,
+  renameRoom,
+  setFavorite,
+  RoomApiError,
+} from '../services/rooms';
 import type { CardValue, PlayerRole, Pokemon, SerializedPlayer } from '../types';
 
 const DEFAULT_SEQUENCE: CardValue[] = ['0', '1', '2', '3', '5', '8', '13', '21', '?'];
@@ -38,12 +45,21 @@ export default function RoomPage() {
   const { join, leave, castVote, reveal, reset, clearInactive } = useRoom(roomId);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // O prefetch REST existe para UX: você descobre que a sala nao existe ANTES
+  // de digitar nome e escolher Pokemon. A autoridade continua sendo o socket,
+  // que cobre a corrida entre este fetch e o join.
+  const [metaState, setMetaState] = useState<'loading' | 'ok' | 'missing'>('loading');
+  const [isFavorite, setIsFavorite] = useState(false);
+  // Nome vindo do prefetch: o EntryDialog precisa dele ANTES do join, quando o
+  // `roomState` (que traz o nome pelo socket) ainda nao existe.
+  const [prefetchedName, setPrefetchedName] = useState<string | null>(null);
 
   const roomState = useRoomStore((s) => s.roomState);
   const myPlayerId = useRoomStore((s) => s.myPlayerId);
   const joining = useRoomStore((s) => s.joining);
   const joined = useRoomStore((s) => s.joined);
   const error = useRoomStore((s) => s.error);
+  const closed = useRoomStore((s) => s.closed);
   const setEntryData = useRoomStore((s) => s.setEntryData);
   const resetStore = useRoomStore((s) => s.reset);
 
@@ -63,6 +79,29 @@ export default function RoomPage() {
     };
   }, [roomId, resetStore]);
 
+  useEffect(() => {
+    if (!roomId) return;
+    let cancelled = false;
+    setMetaState('loading');
+    getRoom(roomId)
+      .then((room) => {
+        if (cancelled) return;
+        setIsFavorite(room.isFavorite);
+        setPrefetchedName(room.name);
+        setMetaState('ok');
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // SO o 404 bloqueia. Rede instavel ou banco fora (503) nao podem
+        // impedir a entrada: o socket sabe entrar numa sala ja viva em memoria
+        // mesmo com o Postgres fora do ar, e e ele quem decide.
+        setMetaState(err instanceof RoomApiError && err.status === 404 ? 'missing' : 'ok');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
+
   // Reentrada automatica: com uma sessao salva nesta aba, o F5 volta direto
   // para a mesa em vez de reabrir o dialogo (e sem criar um assento novo).
   // A reconexao depois de queda e tratada pelo handler de `connect` no useRoom;
@@ -78,6 +117,15 @@ export default function RoomPage() {
     setEntryData({ name: stored.name, pokemon: stored.pokemon, role: stored.role });
     join(stored.name, stored.pokemon, stored.role);
   }, [roomId, userId, connected, joined, joining, join, setEntryData]);
+
+  // O dono excluiu a sala com a gente dentro: sai da mesa e leva o aviso para a
+  // home pelo `location.state`, do mesmo jeito que o RequireAuth passa o `from`.
+  useEffect(() => {
+    if (!closed) return;
+    if (userId) clearSession(userId, roomId);
+    resetStore();
+    navigate('/', { replace: true, state: { notice: 'ROOM_DELETED' } });
+  }, [closed, userId, roomId, resetStore, navigate]);
 
   const handleEntry = (data: { name: string; pokemon: Pokemon; role: PlayerRole }) => {
     setEntryData(data);
@@ -112,6 +160,30 @@ export default function RoomPage() {
     }
   };
 
+  // Otimista com rollback: a estrela e um toggle, e esperar o round-trip para
+  // pintar deixaria o clique com cara de travado.
+  const handleToggleFavorite = async () => {
+    const next = !isFavorite;
+    setIsFavorite(next);
+    try {
+      await setFavorite(roomId, next);
+    } catch {
+      setIsFavorite(!next);
+    }
+  };
+
+  // O nome novo chega de volta pelo `room:state` (o servidor rebroadcasta), so
+  // que so para quem esta na sala -- por isso aqui nao ha setState local.
+  const handleRename = async (name: string) => {
+    await renameRoom(roomId, name);
+  };
+
+  // Nao navega: o proprio dono recebe o `room:closed` que o servidor difunde,
+  // e o efeito la em cima cuida da saida para todo mundo por um caminho so.
+  const handleDelete = async () => {
+    await deleteRoom(roomId);
+  };
+
   const players = roomState?.players ?? NO_PLAYERS;
   const revealed = roomState?.revealed ?? false;
   const sequence = roomState?.cardSequence ?? DEFAULT_SEQUENCE;
@@ -134,12 +206,43 @@ export default function RoomPage() {
 
   const hasInactive = players.some((p) => !p.online);
 
+  // Sala inexistente: fala isso NA PROPRIA URL, sem redirect. Mandar de volta
+  // para a home em silencio faria um 404 legitimo parecer bug e destruiria o
+  // codigo que a pessoa estava tentando abrir.
+  const missing = metaState === 'missing' || error?.code === 'ROOM_NOT_FOUND';
+  if (missing) {
+    return (
+      <div className="min-h-screen bg-dot-grid flex flex-col items-center justify-center px-4 animate-fade-in">
+        <PokeballIcon size={26} className="text-subtle mb-6" />
+        <h1 className="text-lg font-semibold text-text tracking-tight mb-2">
+          Sala não encontrada
+        </h1>
+        <p className="text-sm text-muted text-center max-w-xs mb-1">
+          O código <span className="font-mono text-text">{roomId}</span> não existe
+          ou a sala foi encerrada pelo dono.
+        </p>
+        <Button variant="secondary" className="mt-6" onClick={() => navigate('/')}>
+          Voltar ao início
+        </Button>
+      </div>
+    );
+  }
+
+  if (metaState === 'loading' && !joined) {
+    return (
+      <div className="min-h-screen bg-dot-grid flex items-center justify-center">
+        <PokeballIcon spinning size={28} className="text-muted/60" />
+      </div>
+    );
+  }
+
   if (!joined) {
     return (
       <div className="min-h-screen bg-dot-grid">
         <EntryDialog
           open={!joined}
           roomId={roomId}
+          roomName={prefetchedName}
           joining={joining}
           connected={connected}
           error={error}
@@ -157,7 +260,9 @@ export default function RoomPage() {
         onClearInactive={clearInactive}
         onLeave={handleLeave}
         onHome={() => navigate('/')}
+        onToggleFavorite={handleToggleFavorite}
         hasInactive={hasInactive}
+        isFavorite={isFavorite}
       />
 
       <TopActions me={myPlayer} onSignOut={handleSignOut} />
@@ -212,7 +317,11 @@ export default function RoomPage() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         roomId={roomId}
+        roomName={roomState?.name ?? roomId}
         playerCount={players.length}
+        isOwner={roomState?.isOwner ?? false}
+        onRename={handleRename}
+        onDelete={handleDelete}
       />
 
       {!connected && (
@@ -251,7 +360,8 @@ export default function RoomPage() {
               />
               <div className="mt-4 flex justify-center">
                 <span className="px-3 py-1 text-[11px] font-mono text-subtle border border-border rounded-full">
-                  Sala · <span className="text-muted">{roomId}</span>
+                  {roomState?.name ?? 'Sala'} ·{' '}
+                  <span className="text-muted">{roomId}</span>
                 </span>
               </div>
             </div>
