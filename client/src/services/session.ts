@@ -1,15 +1,15 @@
-import type { PlayerRole, Pokemon } from '../types';
+import type { PlayerRole } from '../types';
 
 /**
  * Preferências de entrada por USUÁRIO e por SALA, guardadas na aba.
  *
  * Não é identidade — quem é o jogador vem da sessão autenticada. Isto só
- * lembra o que a pessoa escolheu (pokémon, papel) para o F5 voltar direto à
- * mesa em vez de reabrir o diálogo.
+ * lembra nome e papel para o F5 voltar direto à mesa em vez de reabrir o
+ * diálogo. O Pokémon saiu daqui: agora é progressão de CONTA, resolvida pelo
+ * servidor, e não uma escolha por sala.
  */
 export interface RoomSession {
   name: string;
-  pokemon: Pokemon;
   role: PlayerRole;
 }
 

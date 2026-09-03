@@ -14,7 +14,11 @@ Inspirado no fluxo do [ScrumJam](https://www.scrumjam.app/poker/). Login pelo Gi
 - **Favoritos**: qualquer pessoa favorita uma sala pela estrela e ela passa a aparecer na home dela.
 - Excluir a sala expulsa quem estiver dentro na hora, com aviso.
 - Entrar via código (URL compartilhável). Código inexistente mostra "Sala não encontrada" em vez de criar uma sala nova.
-- Dialog de entrada: nome + 8 Pokémon aleatórios da 1ª geração (PokéAPI).
+- **Pokémon é progressão de conta**: no primeiro login a pessoa escolhe um inicial (os 3 de cada geração, Gen 1–9, mais a linha do Pichu e o Eevee) e ele a acompanha em todas as salas.
+- **XP por rodada**: quanto mais perto da média da mesa, mais XP. Mesa inteira na mesma carta paga o dobro. Rodada com menos de 3 votos numéricos não pontua.
+- **Evolução** em 250 e 650 XP acumulados, anunciada para a sala inteira com uma animação de ~2 s. O Eevee é a única linha ramificada: no limiar o dono escolhe entre as 8 eeveelutions.
+- Dá para **recomeçar do zero**: libera o Pokémon, perde o XP e escolhe outro inicial.
+- Dialog de entrada: só o nome — o Pokémon já vem da conta.
 - Votação com revelação simultânea (cartas viradas com flip 3D em stagger).
 - Modo espectador (não vota, só observa).
 - Botão **copiar link** da sala.
@@ -34,7 +38,7 @@ Inspirado no fluxo do [ScrumJam](https://www.scrumjam.app/poker/). Login pelo Gi
 
 **Monorepo**: pnpm workspaces (`pnpm-workspace.yaml`).
 
-**Externo**: [PokéAPI](https://pokeapi.co/) (apenas IDs 1–151, com cache em memória + `localStorage`).
+**Externo**: nenhuma API. Os sprites vêm direto do repositório de sprites da PokéAPI por id (`.../sprites/pokemon/<id>.png`), e o catálogo de linhas evolutivas é estático (`*/src/data/pokedex.ts`).
 
 ---
 
@@ -116,17 +120,20 @@ bo-poker/
 │   └── src/
 │       ├── pages/         # HomePage, RoomPage
 │       ├── components/    # EntryDialog, PokerTable, PlayerCard, CardDeck, RoomCard, ...
+│       ├── data/          # pokedex.ts (catalogo estatico, espelhado no server)
 │       ├── store/         # zustand
-│       ├── hooks/         # useSocket, useRoom
-│       ├── services/      # socket singleton, pokeapi, rooms (REST)
+│       ├── hooks/         # useSocket, useRoom, useTrainer
+│       ├── services/      # socket singleton, api, rooms, trainer (REST)
 │       ├── utils/         # stats, cn
 │       └── types/         # tipos espelhados do server
 ├── server/                # Express + Socket.io
 │   └── src/
 │       ├── index.ts
 │       ├── config.ts
+│       ├── data/          # pokedex.ts (byte-identico ao do client)
 │       ├── rooms/         # Room, RoomManager (singleton), roomStore (SQL)
-│       ├── routes/        # rooms.ts (API HTTP de salas)
+│       ├── trainers/      # xp (formula pura), trainerCache, species, awardRound
+│       ├── routes/        # rooms.ts, trainer.ts, session.ts (middleware)
 │       ├── socket/        # handlers, events
 │       └── types/
 └── scripts/
@@ -141,7 +148,7 @@ bo-poker/
 
 | Evento             | Payload                                              |
 |--------------------|------------------------------------------------------|
-| `room:join`        | `{ roomId, name, pokemon, role }`                    |
+| `room:join`        | `{ roomId, name, role }`                             |
 | `room:leave`       | `{}`                                                 |
 | `vote:cast`        | `{ value: CardValue }`                               |
 | `vote:reveal`      | `{}`                                                 |
@@ -157,6 +164,8 @@ bo-poker/
 | `room:joined`      | `{ playerId, role }`   |
 | `room:error`       | `{ code, message }`    |
 | `room:closed`      | `{ roomId, reason }` — o dono excluiu a sala; quem está dentro é mandado para a home |
+| `round:result`     | `RoundResultPayload` — XP da rodada. Broadcast único: é igual para todo mundo |
+| `pokemon:evolved`  | `EvolutionEvent` — uma emissão por evolução, com os dois sprites prontos |
 
 O `RoomState` carrega `name` e `isOwner`. O `isOwner` é calculado **por espectador** (comparando a `identityKey` de quem recebe com o dono) em vez de mandar o `ownerId` cru: o estado vai para toda a mesa, e o id de usuário de outra pessoa não precisa circular.
 
@@ -166,7 +175,7 @@ Antes do reveal, o campo `vote` de cada jogador é mascarado: `null` se ainda n�
 
 O estado é serializado **na perspectiva de quem recebe** (`Room.serializeFor`): cada jogador vê o próprio voto sem máscara, o dos outros como `'HIDDEN'`. Por isso o `room:state` sai socket a socket em vez de um broadcast único — e o cliente não precisa de nenhum estado otimista para saber qual carta está selecionada.
 
-**O `room:join` não carrega identidade.** Quem é o jogador vem da sessão autenticada do socket: o handshake passa por um `io.use()` que valida o cookie do Better Auth e coloca o usuário em `socket.data`. `name` e `pokemon` são cosméticos e validados; `identityKey` e `login` só a sessão define. Toda autorização passa por `requireMember`, que também recusa sessão expirada — o `io.use()` roda uma vez só, no handshake.
+**O `room:join` não carrega identidade NEM Pokémon.** Quem é o jogador vem da sessão autenticada do socket: o handshake passa por um `io.use()` que valida o cookie do Better Auth e coloca o usuário em `socket.data`. Só o `name` é cosmético e validado; `identityKey`, `login` e a espécie exibida só a sessão e a progressão definem. Isso fechou uma injeção: antes o cliente mandava a URL do sprite, que era renderizada como `<img src>` para a mesa inteira. Toda autorização passa por `requireMember`, que também recusa sessão expirada — o `io.use()` roda uma vez só, no handshake.
 
 ---
 
@@ -183,6 +192,16 @@ Tudo sob `/api/rooms`, autenticado pelo mesmo cookie de sessão do Better Auth.
 | `DELETE` | `/api/rooms/:id` | Exclui e expulsa quem está dentro; `403` se não for dono |
 | `PUT`/`DELETE` | `/api/rooms/:id/favorite` | Favorita / desfavorita |
 
+E sob `/api/trainer`, a progressão da conta:
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET`    | `/api/trainer` | A coleção; **200 com lista vazia** quando ainda não escolheu |
+| `POST`   | `/api/trainer/pokemon` | `{ lineId }` — escolhe. `409 POKEMON_LIMIT` no teto |
+| `POST`   | `/api/trainer/pokemon/:id/active` | Torna ativo (hoje sempre no-op) |
+| `POST`   | `/api/trainer/pokemon/:id/branch` | `{ dexId }` — a pedra do Eevee |
+| `DELETE` | `/api/trainer/pokemon/:id` | Libera (é o "recomeçar do zero") |
+
 Erro de banco responde **503**, nunca 404 — a diferença importa (ver a decisão logo abaixo).
 
 > **Sem checagem de `Origin` própria, de propósito.** No deploy de serviço único o cliente e a API dividem o domínio, então estas chamadas são *same-origin*. Uma versão anterior comparava o `Origin` do browser com `BETTER_AUTH_URL`/`CORS_ORIGIN` e recusava o próprio app em produção — bastava uma barra no fim da variável ou o `NODE_ENV` sem valor (aí `corsOrigin` cai no default de dev) para a criação de sala virar `403`. Quem protege contra CSRF é o `cors()`: PATCH, DELETE e POST com JSON passam por preflight. Sobra um POST `form-urlencoded` cross-site, que o `express.json()` nem parseia — no pior caso cria uma sala vazia.
@@ -195,9 +214,10 @@ O `onlineCount` de cada sala vem da **memória** (`RoomManager`), não do banco:
 
 ## Decisões de implementação
 
-- **Contrato de wire compartilhado**: `client/src/types/wire.ts` e `server/src/types/wire.ts` são **byte-idênticos** e sem imports, em vez de um pacote `shared` (que não se paga num app deste tamanho). `server/src/types/wire.test.ts` compara os dois arquivos e quebra o build se divergirem.
+- **Contrato de wire compartilhado**: `client/src/types/wire.ts` e `server/src/types/wire.ts` são **byte-idênticos** e sem imports, em vez de um pacote `shared` (que não se paga num app deste tamanho). O mesmo vale para `*/src/data/pokedex.ts`. `server/src/types/wire.test.ts` compara os pares e quebra o build se divergirem.
+- **A fórmula de XP fica SÓ no servidor** (`server/src/trainers/xp.ts`), e não no `wire.ts`. Tentador espelhá-la para o cliente desenhar o `+N XP` sozinho, mas ele calcularia a partir do snapshot dele dos votos, que pode diferir do snapshot do servidor se um voto cair no mesmo tick do reveal — e a mesa veria um número diferente do que foi gravado. O `round:result` resolve isso sendo autoritativo. O que o cliente precisa (limiares e derivação de estágio) mora no `pokedex.ts`, que já é espelhado.
 - **Identidade e reconexão**: o jogador é indexado por uma `identityKey` estável (`user:<id do GitHub>`), não pelo `socket.id`. `Room.upsertPlayer` **religa** a entrada existente em vez de criar outra, preservando voto e `joinedAt` — é isso que faz F5 e queda de rede não duplicarem ninguém. Cada jogador guarda um `Set` de sockets, então abas duplicadas compartilham um assento sem derrubar uma à outra. O `useRoom` reemite `room:join` no `connect`, e a operação é idempotente.
-- **Preferências da aba**: `client/src/services/session.ts` guarda nome/pokémon/role por **usuário e sala** em `sessionStorage` — não é identidade, só evita reabrir o diálogo no F5. A chave inclui o id do usuário para que trocar de conta na mesma aba não reaproveite o perfil anterior. Storage inacessível (modo privado, iframe sandboxed) cai num fallback em memória em vez de quebrar.
+- **Preferências da aba**: `client/src/services/session.ts` guarda nome/role por **usuário e sala** em `sessionStorage` (o Pokémon saiu daqui: virou progressão de conta) — não é identidade, só evita reabrir o diálogo no F5. A chave inclui o id do usuário para que trocar de conta na mesma aba não reaproveite o perfil anterior. Storage inacessível (modo privado, iframe sandboxed) cai num fallback em memória em vez de quebrar.
 - **Nome de exibição**: vem do GitHub (só o primeiro nome), é editável e fica salvo **na conta** via `authClient.updateUser`, então segue a pessoa entre salas e máquinas. Dois jogadores podem ter o mesmo nome — o `@handle` do GitHub aparece no tooltip do card para desambiguar.
 - **Saída deliberada vs. queda**: sair pelo botão ou trocar de sala pela URL libera o assento na hora; só desconexão involuntária passa pelo período de graça.
 - **Cleanup**: uma varredura a cada `PLAYER_SWEEP_INTERVAL_MS` (padrão 10 s) remove jogadores offline há mais de `PLAYER_GRACE_MS` (padrão 45 s), apaga salas que esvaziaram e as que passaram do TTL com todo mundo offline. A política vive em métodos puros com relógio injetado (`Room.reapOffline`, `RoomManager.sweep`); só o agendamento fica no `index.ts`.
@@ -207,6 +227,13 @@ O `onlineCount` de cada sala vem da **memória** (`RoomManager`), não do banco:
 - **Guarda de `socket.connected` depois do `await` do banco.** O handler de join virou assíncrono, e o socket pode cair no meio. Sem a guarda, o `upsertPlayer` criaria um jogador `online: true` preso a um socket morto — e ele seria **incoletável**, porque `reapOffline` pula quem está online e `allOfflineSince()` devolve `null`. Vazamento permanente de sala.
 - **O dono é só do cadastro.** Renomear, excluir e copiar link são dele; revelar, nova rodada e limpar inativos continuam de todos. A mesa segue horizontal — o dono existe para a sala ter nome e alguém poder apagá-la, não para mandar na rodada.
 - **Autorização**: `requireMember` exige que o socket seja membro atual da sala para votar, revelar, resetar ou limpar inativos. Qualquer membro pode fazer todas essas ações: o dono da sala **não** tem poder extra sobre a rodada.
+- **A fórmula de XP mede distância em CASAS DO DECK, não em pontos.** O deck é Fibonacci, então `13` vs `21` é uma casa e não oito pontos. A média vira um índice **fracionário** interpolado entre as duas cartas vizinhas (média 17 → 6.5), para quem votou 13 e quem votou 21 receberem o mesmo — arredondar para a carta mais próxima puniria metade da mesa por um empate técnico. `xp = max(0, round(10 * (1 - d/4)))`. Consenso paga 20 fixos. **A trava de 3 votos numéricos vence o consenso**: numa mesa de duas pessoas votando igual as regras se contradizem, e quem tem de ganhar é a trava anti-farm. Caso extremo aceito e fixado em teste: em rodadas muito dispersas (`0,0,21`) o outlier pode levar mais que a maioria, porque a média é calculada em espaço de valor e a distância em espaço de índice — mudar isso desalinharia o XP da "Média" que a mesa vê na tela.
+- **A forma exibida é ADIADA (`Player.shownStage`).** Sem isso o `room:state` do reveal já trocaria o sprite e entregaria a evolução ~3 s antes de a animação tocar. O estágio exibido é fotografado no join e re-sincronizado só no `Room.reset()` — a forma nova aterrissa junto com a rodada nova. O `xp`, esse, vai vivo. O religamento (F5 no meio do reveal) **não** refotografa, senão a evolução vazaria por aí.
+- **A fila de evolução NÃO é limpa no reset da rodada.** Uma evolução é marco de conta, não estado de rodada: limpá-la descartaria em silêncio a animação de quem clicou "Nova rodada" rápido demais. Ela espera a mesa ficar livre e toca depois. Já o `round:result` (os floaters de `+N XP`) morre com a rodada, porque é dela.
+- **O portão de "escolha um inicial" é do CLIENTE; o servidor falha macio.** Recusar o `room:join` de quem não tem Pokémon obrigaria a ler o banco no caminho do join, e a falha dessa leitura só teria desfechos ruins: deixar entrar assim mesmo (portão decorativo) ou recusar (quebra a invariante de que um blip do Postgres não impede reconexão nem F5). Então quem entra sem Pokémon **entra**, aparece com a Pokébola e ganha 0 XP; o `RequireStarter` no cliente é quem bloqueia, e ele **falha aberto** em 503 pela mesma razão que o `metaState` da RoomPage só bloqueia em 404.
+- **O cache de treinadores espelha o padrão das salas**: memória primeiro, banco só quando frio, e a memória é a verdade enquanto o processo vive. O XP do reveal é aplicado em memória e persistido pelo `flush()` do sweep que já rodava — o broadcast nunca espera o banco. Falha de escrita mantém o delta pendente e tenta de novo; um restart no meio dessa janela perde XP, o que é aceito. Leituras degradadas ficam marcadas e o mesmo sweep as reconcilia, rebroadcastando as salas de quem curou.
+- **`Player.trainer` é uma REFERÊNCIA ao objeto do cache, não uma cópia** — por isso XP ganho numa sala aparece na hora noutra onde a mesma pessoa esteja sentada, sem código de sincronização. A contrapartida: operações de conta precisam **reatribuir** a referência (`Room.refreshTrainer`), não só re-sincronizar; liberar o Pokémon só o tira da coleção, e sem reatribuir o jogador continuaria segurando o objeto órfão.
+- **O modelo já é de coleção, com teto de aplicação.** `trainer_pokemon` tem uma linha por Pokémon possuído e um índice parcial `unique (userId) where "isActive"`; store, cache e API REST endereçam por id de Pokémon. Hoje `MAX_POKEMON_PER_USER` é 1. Destravar é subir a constante e decidir **como** se ganha um Pokémon novo — nada de migração nem de mudança de contrato.
 - **Animações**: mistura de CSS puro (`@keyframes` + classes do Tailwind config) e **framer-motion** (`PokerTable`, `PlayerCard`, `Confetti`).
 - **Card flip**: 3D real com `transform: rotateY(180deg)` + `backface-visibility: hidden`, em onda center-out com passo de 120 ms (`WAVE_STEP_MS`).
 - **Coreografia do reveal**: a ordem das cartas e os atrasos são congelados por id de jogador no instante do reveal (`orderIds` + `delayById`). Derivá-los do índice no array fazia todo atraso mudar quando a ordenação entrava, reiniciando a animação dos Pokémon no meio. Quem entra com a rodada já revelada pula direto para o estado final, sem repetir a coreografia.
@@ -292,7 +319,7 @@ pnpm db:up        # sobe o Postgres do docker-compose
 pnpm db:migrate   # aplica server/migrations/*.sql
 ```
 
-Tabelas: `user`, `session`, `account`, `verification` (do Better Auth, em `0001_auth_init.sql`) e `room` + `room_favorite` (em `0002_rooms.sql`). O código da sala é a própria PK de `room`; `ownerId` e os favoritos referenciam `user` com `on delete cascade`.
+Tabelas: `user`, `session`, `account`, `verification` (do Better Auth, em `0001_auth_init.sql`), `room` + `room_favorite` (em `0002_rooms.sql`) e `trainer_pokemon` (em `0003_trainer_pokemon.sql`). O código da sala é a própria PK de `room`; `ownerId` e os favoritos referenciam `user` com `on delete cascade`.
 
 Para regenerar o schema depois de mexer na config do Better Auth (a CLI exige Node ≥ 22; o runtime do projeto segue no 20):
 
@@ -334,4 +361,4 @@ O script `scripts/smoke.mjs` usa o `socket.io-client` instalado como devDependen
 
 ## Não-objetivos
 
-Sem persistência de **rodadas**, histórico, exportação, timer ou modo claro. O Postgres guarda usuário/sessão **e o cadastro das salas** (código, nome, dono, favoritos) — os votos e o estado da mesa continuam só em memória. Sem transferência de propriedade, sem sala privada, sem limite de salas por usuário. Sem libs pesadas de UI. O tema Pokémon é uma **camada sutil** — vibe Linear/Vercel com acentos da PokéBola, não Game Boy.
+Sem persistência de **rodadas**, histórico, exportação, timer ou modo claro. O Postgres guarda usuário/sessão, o cadastro das salas (código, nome, dono, favoritos) **e a progressão dos Pokémon** — os votos e o estado da mesa continuam só em memória. Sem ranking, sem troca de Pokémon entre pessoas, sem mais de um Pokémon por conta (o schema aguenta, o teto é de aplicação). Sem transferência de propriedade, sem sala privada, sem limite de salas por usuário. Sem libs pesadas de UI. O tema Pokémon é uma **camada sutil** — vibe Linear/Vercel com acentos da PokéBola, não Game Boy.

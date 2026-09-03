@@ -14,4 +14,8 @@ export const Events = {
   ROOM_ERROR: 'room:error',
   /** A sala deixou de existir (dono excluiu) enquanto a pessoa estava dentro. */
   ROOM_CLOSED: 'room:closed',
+  /** Resultado de XP da rodada. Broadcast único: é igual para todo mundo. */
+  ROUND_RESULT: 'round:result',
+  /** Uma emissão por evolução. Broadcast único, com os dois sprites prontos. */
+  POKEMON_EVOLVED: 'pokemon:evolved',
 } as const;

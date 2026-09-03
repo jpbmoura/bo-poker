@@ -10,12 +10,15 @@ import { StatsPanel } from '../components/StatsPanel';
 import { IconSidebar } from '../components/IconSidebar';
 import { TopActions } from '../components/TopActions';
 import { SettingsDialog } from '../components/SettingsDialog';
+import { EvolutionOverlay } from '../components/EvolutionOverlay';
+import { EeveeStoneDialog } from '../components/EeveeStoneDialog';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
 import { Button } from '../components/ui/Button';
 import { cn } from '../utils/cn';
 import { computeStats, someoneVoted as anyoneVoted } from '../utils/stats';
 import { clearSession, readSession } from '../services/session';
 import { signOut, useSession } from '../services/auth';
+import { useTrainer } from '../hooks/useTrainer';
 import { disconnectSocket } from '../services/socket';
 import { normalizeRoomId } from '../types';
 import {
@@ -25,7 +28,7 @@ import {
   setFavorite,
   RoomApiError,
 } from '../services/rooms';
-import type { CardValue, PlayerRole, Pokemon, SerializedPlayer } from '../types';
+import type { CardValue, PlayerRole, SerializedPlayer } from '../types';
 
 const DEFAULT_SEQUENCE: CardValue[] = ['0', '1', '2', '3', '5', '8', '13', '21', '?'];
 
@@ -38,6 +41,7 @@ export default function RoomPage() {
   const navigate = useNavigate();
   const { connected } = useSocket();
   const { data: session } = useSession();
+  const { active: trainerActive } = useTrainer();
   const userId = session?.user?.id ?? null;
 
   // Sem canonicalizar, /room/abc e /room/ABC eram salas diferentes.
@@ -60,6 +64,8 @@ export default function RoomPage() {
   const joined = useRoomStore((s) => s.joined);
   const error = useRoomStore((s) => s.error);
   const closed = useRoomStore((s) => s.closed);
+  const roundResult = useRoomStore((s) => s.roundResult);
+  const setCeremonyBusy = useRoomStore((s) => s.setCeremonyBusy);
   const setEntryData = useRoomStore((s) => s.setEntryData);
   const resetStore = useRoomStore((s) => s.reset);
 
@@ -112,10 +118,11 @@ export default function RoomPage() {
       return;
     }
     const stored = readSession(userId, roomId);
-    if (!stored?.name || !stored.pokemon) return;
+    // Sem condicao de pokemon: ele nao vive mais na sessao da aba.
+    if (!stored?.name) return;
     autoJoinedRef.current = true;
-    setEntryData({ name: stored.name, pokemon: stored.pokemon, role: stored.role });
-    join(stored.name, stored.pokemon, stored.role);
+    setEntryData({ name: stored.name, role: stored.role });
+    join(stored.name, stored.role);
   }, [roomId, userId, connected, joined, joining, join, setEntryData]);
 
   // O dono excluiu a sala com a gente dentro: sai da mesa e leva o aviso para a
@@ -127,9 +134,9 @@ export default function RoomPage() {
     navigate('/', { replace: true, state: { notice: 'ROOM_DELETED' } });
   }, [closed, userId, roomId, resetStore, navigate]);
 
-  const handleEntry = (data: { name: string; pokemon: Pokemon; role: PlayerRole }) => {
+  const handleEntry = (data: { name: string; role: PlayerRole }) => {
     setEntryData(data);
-    join(data.name, data.pokemon, data.role);
+    join(data.name, data.role);
   };
 
   const handleLeave = () => {
@@ -194,6 +201,20 @@ export default function RoomPage() {
   );
 
   const stats = useMemo(() => computeStats(players), [players]);
+
+  // XP da rodada por jogador. Vem PRONTO do servidor (`round:result`): o cliente
+  // não recalcula, senão poderia mostrar um número diferente do que foi gravado.
+  const gainByPlayerId = useMemo(() => {
+    if (!roundResult) return undefined;
+    const map: Record<string, number> = {};
+    for (const entry of roundResult.xp) map[entry.playerId] = entry.gained;
+    return map;
+  }, [roundResult]);
+
+  // O seletor de pedra é só do dono do Eevee: a condição sai do progresso do
+  // PRÓPRIO jogador, nunca da mesa.
+  const needsStone =
+    myPlayer?.progress?.pendingChoice === true && trainerActive !== null;
 
   // O servidor manda o estado ja na perspectiva de quem recebe: cada jogador ve
   // o proprio voto sem mascara. Por isso nao existe mais estado local otimista
@@ -313,6 +334,11 @@ export default function RoomPage() {
         </div>
       )}
 
+      {/* Acima do Confetti (z-40) e do Dialog (z-50): ver EvolutionOverlay. */}
+      <EvolutionOverlay />
+
+      {needsStone && trainerActive && <EeveeStoneDialog pokemon={trainerActive} />}
+
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -345,6 +371,8 @@ export default function RoomPage() {
                 myPlayerId={myPlayerId}
                 consensus={stats.consensus}
                 outlierIds={stats.outlierIds}
+                gainByPlayerId={gainByPlayerId}
+                onCeremonyBusyChange={setCeremonyBusy}
               />
 
               <StatsPanel stats={stats} visible={revealed} />

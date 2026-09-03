@@ -1,0 +1,77 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { formAt, isPendingChoice, liveStage, progressAt } from './species.js';
+import type { OwnedPokemon } from './species.js';
+
+const owned = (over: Partial<OwnedPokemon> = {}): OwnedPokemon => ({
+  id: 'pk1',
+  lineId: 'charmander',
+  branchId: null,
+  xp: 0,
+  ...over,
+});
+
+test('liveStage segue os limiares', () => {
+  assert.equal(liveStage(owned({ xp: 0 })), 0);
+  assert.equal(liveStage(owned({ xp: 250 })), 1);
+  assert.equal(liveStage(owned({ xp: 650 })), 2);
+});
+
+test('liveStage do Eevee trava em 1: o 3º limiar é no-op ali', () => {
+  assert.equal(liveStage(owned({ lineId: 'eevee', xp: 650 })), 1);
+});
+
+test('formAt devolve a espécie com o sprite montado', () => {
+  assert.deepEqual(formAt(owned(), 0, null), {
+    id: 4,
+    name: 'Charmander',
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png',
+  });
+  assert.equal(formAt(owned(), 2, null)?.name, 'Charizard');
+});
+
+test('formAt aceita um estágio ADIADO, diferente do derivado do XP', () => {
+  // XP já é de estágio 2, mas a mesa ainda mostra o estágio 1.
+  const p = owned({ xp: 650 });
+  assert.equal(liveStage(p), 2);
+  assert.equal(formAt(p, 1, null)?.name, 'Charmeleon');
+});
+
+test('Eevee sem pedra permanece Eevee, com pendingChoice ligado', () => {
+  const p = owned({ lineId: 'eevee', xp: 250 });
+  assert.equal(isPendingChoice(p), true);
+  assert.equal(formAt(p, 1, null)?.id, 133);
+});
+
+test('Eevee com pedra vira a eeveelution e sai do pendente', () => {
+  const p = owned({ lineId: 'eevee', xp: 250, branchId: 197 });
+  assert.equal(isPendingChoice(p), false);
+  assert.equal(formAt(p, 1, 197)?.name, 'Umbreon');
+});
+
+test('Eevee antes do limiar não está pendente', () => {
+  assert.equal(isPendingChoice(owned({ lineId: 'eevee', xp: 10 })), false);
+});
+
+test('progressAt leva o XP VIVO e o estágio EXIBIDO', () => {
+  const p = owned({ xp: 260 });
+  assert.deepEqual(progressAt(p, 0), {
+    pokemonId: 'pk1',
+    lineId: 'charmander',
+    stage: 0,
+    maxStage: 2,
+    xp: 260,
+    nextXp: 650,
+    pendingChoice: false,
+  });
+});
+
+test('progressAt no estágio final não tem próximo limiar', () => {
+  assert.equal(progressAt(owned({ xp: 700 }), 2)?.nextXp, null);
+  assert.equal(progressAt(owned({ lineId: 'eevee', xp: 300, branchId: 134 }), 1)?.nextXp, null);
+});
+
+test('linha desconhecida devolve null em vez de explodir', () => {
+  assert.equal(formAt(owned({ lineId: 'tauros' }), 0, null), null);
+  assert.equal(progressAt(owned({ lineId: 'tauros' }), 0), null);
+});

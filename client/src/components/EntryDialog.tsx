@@ -1,13 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Zap } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
-import { PokemonPicker } from './PokemonPicker';
 import { PokeballIcon } from './ui/PokeballIcon';
-import { getForcedPokemonForName } from '../utils/forcedPokemon';
 import { PLAYER_NAME_MAX_LENGTH } from '../types';
-import type { Pokemon, PlayerRole, RoomError } from '../types';
+import type { PlayerRole, RoomError } from '../types';
 import { updateUser, useSession } from '../services/auth';
+import { useTrainer } from '../hooks/useTrainer';
 
 interface EntryDialogProps {
   open: boolean;
@@ -17,7 +15,7 @@ interface EntryDialogProps {
   joining: boolean;
   connected: boolean;
   error: RoomError | null;
-  onSubmit: (data: { name: string; pokemon: Pokemon; role: PlayerRole }) => void;
+  onSubmit: (data: { name: string; role: PlayerRole }) => void;
 }
 
 export function EntryDialog({
@@ -30,6 +28,8 @@ export function EntryDialog({
   onSubmit,
 }: EntryDialogProps) {
   const { data: session } = useSession();
+  const { active } = useTrainer();
+
   // Só o primeiro nome: numa mesa de refinamento é o que a pessoa quer, e o
   // nome completo do GitHub costuma estourar o card. Ela pode editar.
   const githubFirstName = (session?.user?.name ?? '')
@@ -38,7 +38,6 @@ export function EntryDialog({
     .slice(0, PLAYER_NAME_MAX_LENGTH);
 
   const [name, setName] = useState(githubFirstName);
-  const [pokemon, setPokemon] = useState<Pokemon | null>(null);
 
   // A sessão resolve de forma assíncrona; preenche assim que chegar, sem
   // atropelar o que a pessoa já tiver digitado.
@@ -47,36 +46,20 @@ export function EntryDialog({
     if (!touchedRef.current && githubFirstName) setName(githubFirstName);
   }, [githubFirstName]);
 
-  const forcedPokemon = getForcedPokemonForName(name);
-  const locked = forcedPokemon !== null;
-  const effectivePokemon = forcedPokemon ?? pokemon;
-
-  // When the name triggers a forced pokemon, sync the picker's slot to it.
-  useEffect(() => {
-    if (forcedPokemon) {
-      setPokemon(forcedPokemon);
-    }
-  }, [forcedPokemon]);
-
   // Sem a guarda de conexao o emit ia para o buffer do socket e o botao ficava
   // em "Entrando..." sem nunca receber resposta.
-  const canSubmit =
-    name.trim().length >= 1 && effectivePokemon !== null && !joining && connected;
+  const canSubmit = name.trim().length >= 1 && !joining && connected;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !effectivePokemon) return;
+    if (!canSubmit) return;
     const finalName = name.trim();
     // O nome editado vive na conta, então segue a pessoa para outras salas e
     // outras máquinas. Falha aqui não impede entrar na sala.
     if (finalName !== session?.user?.name) {
       void updateUser({ name: finalName }).catch(() => undefined);
     }
-    onSubmit({
-      name: finalName,
-      pokemon: effectivePokemon,
-      role: 'voter',
-    });
+    onSubmit({ name: finalName, role: 'voter' });
   };
 
   return (
@@ -108,24 +91,27 @@ export function EntryDialog({
           autoFocus
         />
 
-        <label className="block text-xs uppercase tracking-wider text-subtle mb-3">
-          Escolha seu Pokémon
-        </label>
-
-        {locked && (
-          <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-highlight-soft border border-highlight/30 text-highlight animate-fade-in">
-            <Zap size={14} strokeWidth={2.4} />
-            <span className="text-xs font-medium">
-              Arthur sempre joga com Tauros.
-            </span>
+        {/*
+          O Pokémon não se escolhe mais aqui: ele é da CONTA e evolui com o XP.
+          O preview existe só para a pessoa saber com quem vai entrar na mesa.
+        */}
+        {active && (
+          <div className="flex items-center gap-3 px-3.5 py-3 rounded-lg bg-surface-2 border border-border animate-fade-in">
+            <img
+              src={active.form.sprite}
+              alt=""
+              className="w-10 h-10 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]"
+            />
+            <div className="min-w-0">
+              <div className="text-sm text-text capitalize truncate">{active.form.name}</div>
+              <div className="text-[11px] font-mono text-subtle">
+                {active.progress.xp} XP
+                {active.progress.nextXp !== null &&
+                  ` · faltam ${active.progress.nextXp - active.progress.xp} para evoluir`}
+              </div>
+            </div>
           </div>
         )}
-
-        <PokemonPicker
-          selected={effectivePokemon}
-          onSelect={setPokemon}
-          locked={locked}
-        />
 
         {error && (
           <div className="mt-4 p-3 bg-danger-soft border border-danger/30 rounded-lg text-xs text-danger animate-fade-in">

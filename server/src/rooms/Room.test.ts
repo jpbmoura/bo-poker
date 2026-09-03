@@ -1,9 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Room } from './Room.js';
-import type { Pokemon } from '../types/index.js';
+import type { PokemonState } from '../trainers/trainerCache.js';
 
-const POKE: Pokemon = { id: 25, name: 'pikachu', sprite: 'p.png' };
+/** Um treinador de teste. O estágio exibido é derivado daqui pelo próprio Room. */
+const trainerAt = (xp = 0, over: Partial<PokemonState> = {}): PokemonState => ({
+  id: 'pk1',
+  lineId: 'charmander',
+  branchId: null,
+  xp,
+  isActive: true,
+  pendingXp: 0,
+  ...over,
+});
+
 const T0 = 1_000_000;
 
 /** A identidade é sempre a do usuário autenticado, nunca o nome. */
@@ -16,14 +26,17 @@ function join(
     role?: 'voter' | 'spectator';
     userId?: string;
     login?: string | null;
+    trainer?: PokemonState | null;
   } = {},
 ) {
+  const userId = extra.userId ?? name.toLowerCase();
   return room.upsertPlayer({
-    identityKey: `user:${extra.userId ?? name.toLowerCase()}`,
+    identityKey: `user:${userId}`,
     socketId,
+    userId,
     name,
     login: extra.login ?? name.toLowerCase(),
-    pokemon: POKE,
+    trainer: extra.trainer === undefined ? trainerAt() : extra.trainer,
     role: extra.role ?? 'voter',
     now: extra.now ?? T0,
   });
@@ -145,7 +158,7 @@ test('serializeFor nunca emite estado interno', () => {
   const [serialized] = room.serializeFor(alice.player.id).players;
   assert.deepEqual(
     Object.keys(serialized).sort(),
-    ['id', 'joinedAt', 'login', 'name', 'online', 'pokemon', 'role', 'vote'],
+    ['id', 'joinedAt', 'login', 'name', 'online', 'pokemon', 'progress', 'role', 'vote'],
     'nada de identityKey/socketIds/lastSeenAt no wire',
   );
 });

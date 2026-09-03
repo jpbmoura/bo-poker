@@ -4,6 +4,7 @@ import { cn } from '../utils/cn';
 import type { SerializedPlayer } from '../types';
 import { PokeballIcon } from './ui/PokeballIcon';
 import { CountUpValue } from './CountUpValue';
+import { StagePips, XpBar } from './TrainerProgressBits';
 
 interface PlayerCardProps {
   player: SerializedPlayer;
@@ -18,6 +19,8 @@ interface PlayerCardProps {
   isOutlier: boolean;
   isWaiting: boolean;
   celebrating: boolean;
+  /** XP ganho nesta rodada. undefined enquanto o `round:result` nao chegou. */
+  gainedXp?: number;
 }
 
 const FLIP_DURATION_S = 0.7;
@@ -38,6 +41,7 @@ function PlayerCardInner({
   isOutlier,
   isWaiting,
   celebrating,
+  gainedXp,
 }: PlayerCardProps) {
   const hasVoted = player.vote !== null;
   const offline = !player.online;
@@ -47,6 +51,13 @@ function PlayerCardInner({
   const voteString = typeof player.vote === 'string' ? player.vote : null;
 
   const [emerged, setEmerged] = useState(false);
+
+  // Agora que o sprite vem de uma URL externa fixa (sem fallback de API), um 404
+  // deixaria o card em branco. Cair na Pokebola e o mesmo caminho que o sprite
+  // vazio ja usa.
+  const [spriteFailed, setSpriteFailed] = useState(false);
+  useEffect(() => setSpriteFailed(false), [player.pokemon.sprite]);
+  const sprite = spriteFailed ? '' : player.pokemon.sprite;
 
   useEffect(() => {
     if (!showRevealed) {
@@ -98,7 +109,7 @@ function PlayerCardInner({
         )}
 
         {/* Pokémon emerging from the card (Option A: released at 90° of flip) */}
-        {hasVoted && player.pokemon.sprite && (
+        {hasVoted && sprite && (
           <>
             {/* Single radial-gradient flash (no filter — much cheaper than blur) */}
             <motion.div
@@ -173,7 +184,8 @@ function PlayerCardInner({
             >
               {/* Inner: idle bob + celebration dance (no filter — drop-shadow is expensive on animated elements) */}
               <motion.img
-                src={player.pokemon.sprite}
+                src={sprite}
+                onError={() => setSpriteFailed(true)}
                 alt=""
                 aria-hidden="true"
                 draggable={false}
@@ -243,9 +255,10 @@ function PlayerCardInner({
                     glowing && 'animate-glow-once',
                   )}
                 >
-                  {player.pokemon.sprite ? (
+                  {sprite ? (
                     <img
-                      src={player.pokemon.sprite}
+                      src={sprite}
+                      onError={() => setSpriteFailed(true)}
                       alt={player.pokemon.name}
                       className="w-full h-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]"
                     />
@@ -267,9 +280,10 @@ function PlayerCardInner({
                       <span className="w-1.5 h-1.5 rounded-full bg-muted animate-pulse [animation-delay:180ms]" />
                       <span className="w-1.5 h-1.5 rounded-full bg-muted animate-pulse [animation-delay:360ms]" />
                     </span>
-                  ) : player.pokemon.sprite ? (
+                  ) : sprite ? (
                     <img
-                      src={player.pokemon.sprite}
+                      src={sprite}
+                      onError={() => setSpriteFailed(true)}
                       alt={player.pokemon.name}
                       className="w-full h-full object-contain grayscale opacity-40"
                     />
@@ -325,6 +339,22 @@ function PlayerCardInner({
                     Outlier
                   </span>
                 )}
+                {/* Sobe e some depois do numero assentar. O valor vem do
+                    `round:result`: o cliente nunca recalcula o XP. */}
+                {showRevealed && gainedXp !== undefined && gainedXp > 0 && (
+                  <motion.span
+                    className="absolute -top-2 left-1 text-[10px] font-mono font-semibold text-success"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: [0, 1, 1, 0], y: [6, -2, -6, -14] }}
+                    transition={{
+                      duration: 1.2,
+                      delay: delaySec + FLIP_DURATION_S * 0.55 + 0.38,
+                      times: [0, 0.2, 0.7, 1],
+                    }}
+                  >
+                    +{gainedXp} XP
+                  </motion.span>
+                )}
               </div>
             </div>
           </motion.div>
@@ -347,6 +377,18 @@ function PlayerCardInner({
           </span>
         </div>
         {offline && <span className="text-[10px] text-subtle">offline</span>}
+        {/* Progresso, no registro discreto que o resto da mesa usa. */}
+        {player.progress && (
+          <div className="w-[92px] mt-1">
+            <XpBar progress={player.progress} />
+            <div className="mt-1 flex items-center justify-center gap-1.5">
+              <StagePips progress={player.progress} />
+              <span className="text-[9px] font-mono text-subtle">
+                {player.progress.xp} XP
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -367,6 +409,7 @@ export const PlayerCard = memo(PlayerCardInner, (a, b) => {
   if (a.isOutlier !== b.isOutlier) return false;
   if (a.isWaiting !== b.isWaiting) return false;
   if (a.celebrating !== b.celebrating) return false;
+  if (a.gainedXp !== b.gainedXp) return false;
   const pa = a.player;
   const pb = b.player;
   return (
@@ -379,7 +422,11 @@ export const PlayerCard = memo(PlayerCardInner, (a, b) => {
     pa.online === pb.online &&
     pa.vote === pb.vote &&
     pa.pokemon.id === pb.pokemon.id &&
-    pa.pokemon.sprite === pb.pokemon.sprite
+    pa.pokemon.sprite === pb.pokemon.sprite &&
+    // Sem estes dois a barra de XP nunca se mexeria: o comparador e manual e
+    // campo que nao esta aqui simplesmente nao re-renderiza.
+    pa.progress?.xp === pb.progress?.xp &&
+    pa.progress?.stage === pb.progress?.stage
   );
 });
 

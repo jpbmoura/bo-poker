@@ -14,11 +14,28 @@ interface PokerTableProps {
   myPlayerId: string | null;
   consensus: boolean;
   outlierIds: Set<string>;
+  /** XP ganho na rodada, por playerId. Vem do `round:result`, nunca recalculado. */
+  gainByPlayerId?: Record<string, number>;
+  /**
+   * A coreografia está ocupando a mesa. É o sinal que segura o overlay de
+   * evolução — que NÃO recalcula estes tempos, justamente para não
+   * dessincronizar na primeira mudança aqui.
+   */
+  onCeremonyBusyChange?: (busy: boolean) => void;
 }
 
 const PREP_MS = 380;
 const FLIP_BASE_MS = 700;
 const WAVE_STEP_MS = 120;
+/**
+ * Quando a mesa é considerada livre depois do reveal.
+ *
+ * +1400 e não o cleanup completo do consenso (+3600): em +1200 o shake, o glow
+ * e o burst de comemoração já acabaram e o banner assentou. O rabo do confete
+ * segue correndo POR BAIXO do overlay, o que lê como "comemoração -> evolução".
+ * Esperar os 3600 daria ~4 s de nada antes da primeira de até três evoluções.
+ */
+const CEREMONY_END_OFFSET_MS = 1400;
 
 type Verdict = 'consensus' | 'outliers' | 'near' | null;
 
@@ -103,6 +120,8 @@ export function PokerTable({
   myPlayerId,
   consensus,
   outlierIds,
+  gainByPlayerId,
+  onCeremonyBusyChange,
 }: PokerTableProps) {
   const [charging, setCharging] = useState(false);
   const [flipReady, setFlipReady] = useState(false);
@@ -123,6 +142,11 @@ export function PokerTable({
   // as duas invocacoes do StrictMode.
   const [mountedMidReveal] = useState(revealed);
   const skipChoreoRef = useRef(mountedMidReveal);
+  // Por ref de proposito: o effect da coreografia depende SO de `revealed`, e
+  // pendurar o callback nas dependencias reiniciaria a animacao a cada render
+  // do pai — regressao que este arquivo ja sofreu antes com `delayById`.
+  const busyRef = useRef(onCeremonyBusyChange);
+  busyRef.current = onCeremonyBusyChange;
 
   const voters = useMemo(() => players.filter((p) => p.role === 'voter'), [players]);
   const spectators = useMemo(() => players.filter((p) => p.role === 'spectator'), [players]);
@@ -162,6 +186,8 @@ export function PokerTable({
   // can't tear down the active timers — snapshot is read from refs at run time.
   useEffect(() => {
     if (!revealed) {
+      // Nova rodada: a mesa volta a ficar livre.
+      busyRef.current?.(false);
       // Zera aqui (e so aqui) o atalho de "montei no meio do reveal": a partir
       // da proxima rodada a coreografia roda inteira.
       skipChoreoRef.current = false;
@@ -194,6 +220,8 @@ export function PokerTable({
       setDelayById({});
       setCharging(false);
       setFlipReady(true);
+      // Sem coreografia, nada a esperar: a mesa ja esta livre.
+      busyRef.current?.(false);
       return;
     }
 
@@ -216,6 +244,11 @@ export function PokerTable({
     setCharging(true);
 
     const timeouts: number[] = [];
+    // Ocupada agora; livre quando a coreografia assentar.
+    busyRef.current?.(true);
+    timeouts.push(
+      window.setTimeout(() => busyRef.current?.(false), flipEnd + CEREMONY_END_OFFSET_MS),
+    );
     timeouts.push(window.setTimeout(() => {
       setCharging(false);
       setFlipReady(true);
@@ -293,6 +326,7 @@ export function PokerTable({
                   isOutlier={revealed && flipReady && outlierIds.has(player.id)}
                   isWaiting={!revealed && player.vote === null && player.online}
                   celebrating={celebrating}
+                  gainedXp={gainByPlayerId?.[player.id]}
                 />
               ))}
             </motion.div>

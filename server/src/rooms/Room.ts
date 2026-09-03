@@ -4,19 +4,23 @@ import {
   type CardValue,
   type Player,
   type PlayerRole,
-  type Pokemon,
   type RoomState,
   type SerializedPlayer,
 } from '../types/index.js';
+import type { PokemonState } from '../trainers/trainerCache.js';
+import { PLACEHOLDER_POKEMON, formAt, liveStage, progressAt } from '../trainers/species.js';
 
 export interface UpsertInput {
   /** Identidade autenticada e estável entre reconexões (`user:<id>`). */
   identityKey: string;
   socketId: string;
+  /** Id do usuário do Better Auth. Sempre da sessão. */
+  userId: string;
   name: string;
   /** Handle do GitHub; sempre da sessão, nunca do payload. */
   login: string | null;
-  pokemon: Pokemon;
+  /** Referência ao Pokémon ativo no cache. Null = ainda não escolheu. */
+  trainer: PokemonState | null;
   role: PlayerRole;
   now: number;
 }
@@ -67,7 +71,13 @@ export class Room {
     if (existing) {
       existing.name = input.name;
       existing.login = input.login;
-      existing.pokemon = input.pokemon;
+      const hadTrainer = existing.trainer !== null;
+      existing.trainer = input.trainer;
+      // A forma exibida NÃO é refotografada no religamento: preservar o snapshot
+      // é o que mantém a evolução escondida mesmo se a pessoa der F5 no meio do
+      // reveal. A exceção é quem ainda não tinha Pokémon — aí não há o que
+      // esconder e a forma precisa aparecer.
+      if (!hadTrainer && input.trainer) syncShownForm(existing);
       // O papel NÃO é aplicado no religamento: abrir uma segunda aba mandaria
       // o valor do sessionStorage dela e, se fosse 'spectator', APAGARIA o voto
       // em andamento. Papel tem API própria (`player:setRole`).
@@ -81,9 +91,12 @@ export class Room {
     const player: Player = {
       id: nanoid(12),
       identityKey: input.identityKey,
+      userId: input.userId,
       name: input.name,
       login: input.login,
-      pokemon: input.pokemon,
+      trainer: input.trainer,
+      shownStage: 0,
+      shownBranchId: input.trainer?.branchId ?? null,
       role: input.role,
       vote: null,
       online: true,
@@ -91,6 +104,7 @@ export class Room {
       joinedAt: input.now,
       lastSeenAt: input.now,
     };
+    syncShownForm(player);
     this.players.set(player.id, player);
     this.byIdentity.set(player.identityKey, player.id);
     this.bySocket.set(input.socketId, player.id);
@@ -187,7 +201,37 @@ export class Room {
     this.revealed = false;
     for (const player of this.players.values()) {
       player.vote = null;
+      // É AQUI que a forma nova aterrissa. Adiar até o reset é o que impede o
+      // `room:state` do reveal de entregar a evolução antes da animação.
+      syncShownForm(player);
     }
+  }
+
+  /**
+   * Reaponta o treinador do jogador e atualiza a forma exibida AGORA, sem
+   * adiamento. Para as operações de conta (escolher a pedra, liberar, trocar o
+   * ativo): a pessoa acabou de clicar, não há cerimônia a preservar.
+   *
+   * A referência PRECISA ser reatribuída, não só re-sincronizada: `Player.trainer`
+   * aponta para um objeto do cache, e liberar o Pokémon só o tira da coleção —
+   * o jogador continuaria segurando o objeto órfão e exibindo o Pokémon que já
+   * não tem.
+   */
+  refreshTrainer(identityKey: string, trainer: PokemonState | null): boolean {
+    const player = this.findByIdentity(identityKey);
+    if (!player) return false;
+    player.trainer = trainer;
+    syncShownForm(player);
+    return true;
+  }
+
+  hasIdentity(identityKey: string): boolean {
+    return this.byIdentity.has(identityKey);
+  }
+
+  findByIdentity(identityKey: string): Player | undefined {
+    const playerId = this.byIdentity.get(identityKey);
+    return playerId ? this.players.get(playerId) : undefined;
   }
 
   setRole(playerId: string, role: PlayerRole): boolean {
@@ -243,11 +287,17 @@ export class Room {
       } else {
         vote = 'HIDDEN';
       }
+      const form = p.trainer
+        ? formAt(p.trainer, p.shownStage, p.shownBranchId)
+        : null;
       players.push({
         id: p.id,
         name: p.name,
         login: p.login,
-        pokemon: p.pokemon,
+        // Sem Pokémon (nunca escolheu, ou leitura degradada) a mesa mostra a
+        // Pokébola: o cliente já cai nela quando o sprite é vazio.
+        pokemon: form ?? PLACEHOLDER_POKEMON,
+        progress: p.trainer ? progressAt(p.trainer, p.shownStage) : null,
         role: p.role,
         online: p.online,
         joinedAt: p.joinedAt,
@@ -266,4 +316,18 @@ export class Room {
       topic: this.topic,
     };
   }
+}
+
+/**
+ * Refotografa a forma exibida a partir do estado VIVO do treinador. Isolado numa
+ * função para o adiamento ter um lugar só — quem chama decide QUANDO, nunca como.
+ */
+function syncShownForm(player: Player): void {
+  if (!player.trainer) {
+    player.shownStage = 0;
+    player.shownBranchId = null;
+    return;
+  }
+  player.shownStage = liveStage(player.trainer);
+  player.shownBranchId = player.trainer.branchId;
 }

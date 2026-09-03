@@ -10,7 +10,9 @@ import { config } from './config.js';
 import { auth, pool } from './auth.js';
 import { registerSocketHandlers, broadcastRoomState } from './socket/handlers.js';
 import { createRoomsRouter } from './routes/rooms.js';
+import { createTrainerRouter } from './routes/trainer.js';
 import { RoomManager } from './rooms/RoomManager.js';
+import { TrainerCache } from './trainers/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -47,6 +49,7 @@ const io = new Server(httpServer, {
 // (que voltaria index.html) enquanto POST/PATCH/DELETE seguiriam funcionando --
 // uma falha bem dificil de diagnosticar.
 app.use('/api/rooms', createRoomsRouter(io));
+app.use('/api/trainer', createTrainerRouter(io));
 
 /**
  * Liveness puro: responde 200 enquanto o processo estiver vivo.
@@ -112,6 +115,28 @@ setInterval(() => {
   if (removedRooms > 0) {
     console.log(`[sweep] removed ${removedRooms} stale room(s)`);
   }
+
+  // Persistencia do XP: o reveal so mexe na memoria (para o broadcast sair
+  // rapido) e deixa o delta pendente aqui. Falha de escrita mantem o pendente e
+  // tenta de novo no proximo ciclo.
+  void TrainerCache.flush().catch((err) => {
+    console.error('[sweep] flush de XP falhou:', (err as Error).message);
+  });
+
+  // Auto-cura das leituras degradadas: sem isto, quem conectou com o banco fora
+  // ficaria de Pokebola ate a proxima reconexao.
+  void TrainerCache.reconcile()
+    .then((healed) => {
+      for (const userId of healed) {
+        const state = TrainerCache.peek(userId);
+        const active = state ? TrainerCache.activePokemon(state) : null;
+        for (const room of RoomManager.roomsWithIdentity(`user:${userId}`)) {
+          room.refreshTrainer(`user:${userId}`, active);
+          broadcastRoomState(io, room);
+        }
+      }
+    })
+    .catch(() => undefined);
 }, config.sweepIntervalMs);
 
 httpServer.listen(config.port, () => {

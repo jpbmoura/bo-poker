@@ -68,6 +68,19 @@ export class RoomManagerImpl {
     return { changed, removedRooms };
   }
 
+  /**
+   * Salas vivas onde esta identidade está sentada. Varredura linear porque não
+   * há índice por usuário — são poucas salas, e concentrar a busca aqui evita
+   * espalhá-la pelas rotas que precisam rebroadcastar depois de mexer na conta.
+   */
+  roomsWithIdentity(identityKey: string): Room[] {
+    const found: Room[] = [];
+    for (const room of this.rooms.values()) {
+      if (room.hasIdentity(identityKey)) found.push(room);
+    }
+    return found;
+  }
+
   size(): number {
     return this.rooms.size;
   }

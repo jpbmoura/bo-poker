@@ -16,6 +16,30 @@ export interface Pokemon {
 }
 
 /**
+ * Progresso do Pokémon ATIVO de um jogador. Público: a mesa inteira vê o XP de
+ * todo mundo.
+ *
+ * `stage` é a forma EXIBIDA, e não a derivada do XP. Durante o reveal a barra
+ * passa do limiar de propósito — é o aviso de que a evolução vem aí — enquanto o
+ * sprite só troca na rodada seguinte, para o `room:state` não entregar a
+ * animação de evolução segundos antes de ela tocar.
+ */
+export interface TrainerProgress {
+  /** Id da linha em `trainer_pokemon`. */
+  pokemonId: string;
+  /** Slug da linha evolutiva (EVOLUTION_LINES[].id). */
+  lineId: string;
+  stage: number;
+  /** Maior estágio da linha: 2 nas normais, 1 na do Eevee. */
+  maxStage: number;
+  xp: number;
+  /** XP do próximo limiar; null quando já está no estágio final. */
+  nextXp: number | null;
+  /** Eevee que cruzou o limiar e ainda não escolheu a pedra. */
+  pendingChoice: boolean;
+}
+
+/**
  * Um jogador na perspectiva de UM espectador específico: `vote` vem sem máscara
  * para esse espectador e como 'HIDDEN' para os demais até o reveal.
  */
@@ -24,7 +48,10 @@ export interface SerializedPlayer {
   name: string;
   /** Handle do GitHub. Vem SEMPRE da sessão, nunca do payload do cliente. */
   login: string | null;
+  /** Espécie EXIBIDA. Resolvida pelo servidor a partir do catálogo. */
   pokemon: Pokemon;
+  /** Progresso do treinador. Null enquanto a pessoa não tem nenhum Pokémon. */
+  progress: TrainerProgress | null;
   role: PlayerRole;
   online: boolean;
   joinedAt: number;
@@ -51,7 +78,6 @@ export interface RoomState {
 export type RoomErrorCode =
   | 'ROOM_FULL'
   | 'INVALID_NAME'
-  | 'INVALID_POKEMON'
   | 'INVALID_ROOM'
   | 'NOT_IN_ROOM'
   | 'SESSION_EXPIRED'
@@ -66,13 +92,16 @@ export interface RoomError {
 /**
  * client -> server `room:join`
  *
- * Não carrega identidade: quem é o jogador vem da sessão autenticada do socket.
- * `name` e `pokemon` são cosméticos e validados no servidor.
+ * Não carrega identidade NEM Pokémon: quem é o jogador vem da sessão autenticada
+ * do socket, e a espécie vem da progressão da conta. Só o `name` é cosmético e
+ * validado aqui.
+ *
+ * O Pokémon ter saído daqui é o que fecha a injeção de `sprite` arbitrário: até
+ * então o cliente mandava uma URL qualquer que a mesa inteira renderizava.
  */
 export interface JoinPayload {
   roomId: string;
   name: string;
-  pokemon: Pokemon;
   role: PlayerRole;
 }
 
@@ -91,6 +120,40 @@ export interface JoinedPayload {
 export interface RoomClosedPayload {
   roomId: string;
   reason: 'deleted';
+}
+
+/**
+ * server -> sala `round:result`
+ *
+ * O resultado de XP da rodada. Vai por broadcast único (e não socket a socket
+ * como o `room:state`) porque é idêntico para todo mundo — não há nada a
+ * mascarar depois do reveal.
+ *
+ * O cliente NÃO recalcula esses números: a fórmula vive só no servidor, que é
+ * quem tem o snapshot autoritativo dos votos no instante do reveal.
+ */
+export interface RoundResultPayload {
+  /** false quando a rodada não atingiu o mínimo de votos numéricos. */
+  awarded: boolean;
+  consensus: boolean;
+  /** Índice fracionário alvo no deck; null quando a rodada não pontuou. */
+  targetIndex: number | null;
+  xp: Array<{ playerId: string; gained: number; total: number }>;
+}
+
+/**
+ * server -> sala `pokemon:evolved`
+ *
+ * Uma emissão por evolução. Os dois sprites vão prontos para o cliente não
+ * precisar consultar o catálogo em tempo de animação.
+ */
+export interface EvolutionEvent {
+  playerId: string;
+  playerName: string;
+  from: Pokemon;
+  to: Pokemon;
+  /** Ordem de reprodução quando várias evoluções caem na mesma rodada. */
+  seq: number;
 }
 
 export const ROOM_ID_MAX_LENGTH = 20;

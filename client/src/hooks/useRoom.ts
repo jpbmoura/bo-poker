@@ -5,12 +5,13 @@ import { readSession, writeSession } from '../services/session';
 import { useSession } from '../services/auth';
 import type {
   CardValue,
+  EvolutionEvent,
   JoinedPayload,
   PlayerRole,
-  Pokemon,
   RoomClosedPayload,
   RoomError,
   RoomState,
+  RoundResultPayload,
 } from '../types';
 
 const Events = {
@@ -27,6 +28,8 @@ const Events = {
   // ATENÇÃO: este mapa é uma cópia de server/src/socket/events.ts e NADA testa a
   // sincronia dos dois. Esquecer um nome aqui faz o listener nunca disparar.
   ROOM_CLOSED: 'room:closed',
+  ROUND_RESULT: 'round:result',
+  POKEMON_EVOLVED: 'pokemon:evolved',
 } as const;
 
 const JOIN_TIMEOUT_MS = 10_000;
@@ -41,6 +44,8 @@ export function useRoom(roomId: string) {
   const setJoined = useRoomStore((s) => s.setJoined);
   const setJoining = useRoomStore((s) => s.setJoining);
   const setClosed = useRoomStore((s) => s.setClosed);
+  const setRoundResult = useRoomStore((s) => s.setRoundResult);
+  const pushEvolution = useRoomStore((s) => s.pushEvolution);
 
   const joinTimeoutRef = useRef<number | null>(null);
 
@@ -84,16 +89,25 @@ export function useRoom(roomId: string) {
       setClosed(payload);
     };
 
+    // Só registra: quem decide QUANDO tocar é o overlay, que espera a
+    // coreografia de reveal do PokerTable terminar.
+    const onRoundResult = (result: RoundResultPayload) => setRoundResult(result);
+    const onEvolved = (evolution: EvolutionEvent) => pushEvolution(evolution);
+
     socket.on(Events.ROOM_STATE, onState);
     socket.on(Events.ROOM_JOINED, onJoined);
     socket.on(Events.ROOM_ERROR, onError);
     socket.on(Events.ROOM_CLOSED, onClosed);
+    socket.on(Events.ROUND_RESULT, onRoundResult);
+    socket.on(Events.POKEMON_EVOLVED, onEvolved);
 
     return () => {
       socket.off(Events.ROOM_STATE, onState);
       socket.off(Events.ROOM_JOINED, onJoined);
       socket.off(Events.ROOM_ERROR, onError);
       socket.off(Events.ROOM_CLOSED, onClosed);
+      socket.off(Events.ROUND_RESULT, onRoundResult);
+      socket.off(Events.POKEMON_EVOLVED, onEvolved);
       clearJoinTimeout();
     };
   }, [
@@ -106,14 +120,16 @@ export function useRoom(roomId: string) {
     setJoining,
     setError,
     setClosed,
+    setRoundResult,
+    pushEvolution,
   ]);
 
   const emitJoin = useCallback(
-    (name: string, pokemon: Pokemon, role: PlayerRole) => {
+    (name: string, role: PlayerRole) => {
       // `joining` funciona como trava de join em voo: a reentrada automatica e
       // a montagem da pagina podem disparar juntas, e um join basta.
       if (useRoomStore.getState().joining) return;
-      if (userId) writeSession(userId, roomId, { name, pokemon, role });
+      if (userId) writeSession(userId, roomId, { name, role });
       setJoining(true);
       setError(null);
       clearJoinTimeout();
@@ -130,8 +146,9 @@ export function useRoom(roomId: string) {
         }
       }, JOIN_TIMEOUT_MS);
 
-      // Sem identidade no payload: quem e o jogador vem da sessao do socket.
-      socket.emit(Events.ROOM_JOIN, { roomId, name, pokemon, role });
+      // Sem identidade NEM Pokemon no payload: quem e o jogador vem da sessao do
+      // socket, e a especie vem da progressao da conta.
+      socket.emit(Events.ROOM_JOIN, { roomId, name, role });
     },
     [socket, roomId, userId, clearJoinTimeout, setError, setJoining],
   );
@@ -140,13 +157,14 @@ export function useRoom(roomId: string) {
   // o assento existente em vez de criar um novo.
   useEffect(() => {
     const onConnect = () => {
-      const { joined, myName, myPokemon, myRole } = useRoomStore.getState();
+      const { joined, myName, myRole } = useRoomStore.getState();
       const stored = userId ? readSession(userId, roomId) : null;
       const name = myName ?? stored?.name;
-      const pokemon = myPokemon ?? stored?.pokemon;
       const role = myName ? myRole : stored?.role;
-      if ((joined || stored) && name && pokemon) {
-        emitJoin(name, pokemon, role ?? 'voter');
+      // A condicao NAO pode exigir um pokemon aqui: ele saiu do payload de join.
+      // Deixar a guarda antiga faria reconexao e F5 pararem em silencio.
+      if ((joined || stored) && name) {
+        emitJoin(name, role ?? 'voter');
       }
     };
     socket.on('connect', onConnect);

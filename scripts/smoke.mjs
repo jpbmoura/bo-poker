@@ -15,7 +15,7 @@ const GRACE_MS = Number(process.env.PLAYER_GRACE_MS) || 1500;
  * com o secret. Aqui usamos a API HTTP de verdade — o sign-in por e-mail/senha
  * existe so fora de producao (ENABLE_DEV_PASSWORD_AUTH=true).
  */
-async function signUp(label) {
+async function signUp(label, opts = {}) {
   const email = `smoke-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@teste.local`;
   const res = await fetch(`${URL}/api/auth/sign-up/email`, {
     method: 'POST',
@@ -34,7 +34,20 @@ async function signUp(label) {
   // headers com ", " e o atributo Expires contem virgula, corrompendo o valor.
   const cookies = res.headers.getSetCookie();
   if (!cookies?.length) throw new Error(`sign-up de ${label} nao devolveu cookie`);
-  return cookies.map((c) => c.split(';')[0]).join('; ');
+  const cookie = cookies.map((c) => c.split(';')[0]).join('; ');
+
+  // O Pokemon virou progressao de CONTA: sem escolher um inicial o jogador
+  // entra na mesa (o servidor falha macio) mas nao pontua, e as assercoes de XP
+  // passariam vazias. `lineId: null` exercita justamente esse caso.
+  if (opts.lineId !== null) {
+    const chosen = await api('POST', '/api/trainer/pokemon', cookie, {
+      lineId: opts.lineId ?? 'charmander',
+    });
+    if (chosen.status !== 200) {
+      throw new Error(`escolha de inicial de ${label} falhou (${chosen.status})`);
+    }
+  }
+  return cookie;
 }
 
 /**
@@ -64,30 +77,30 @@ async function api(method, path, cookie, body) {
   return { status: res.status, body: text ? JSON.parse(text) : null };
 }
 
-const samplePokemon = (name, id) => ({
-  id,
-  name,
-  sprite: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`,
-});
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function makeClient(name, opts = {}) {
-  const { role = 'voter', pokeId = 1, room = ROOM, cookie } = opts;
+  const { role = 'voter', room = ROOM, cookie } = opts;
   const socket = io(URL, {
     transports: ['websocket'],
     extraHeaders: { Cookie: cookie },
   });
-  const client = { socket, name, playerId: null, state: null, lastError: null };
+  const client = {
+    socket,
+    name,
+    playerId: null,
+    state: null,
+    lastError: null,
+    roundResult: null,
+    evolutions: [],
+  };
   socket.on('room:state', (s) => (client.state = s));
+  socket.on('round:result', (result) => (client.roundResult = result));
+  socket.on('pokemon:evolved', (e) => client.evolutions.push(e));
   return new Promise((resolve, reject) => {
     const onConnect = () => {
-      socket.emit('room:join', {
-        roomId: room,
-        name,
-        role,
-        pokemon: samplePokemon(name.toLowerCase(), pokeId),
-      });
+      // Sem `pokemon` no payload: a especie vem da progressao da conta.
+      socket.emit('room:join', { roomId: room, name, role });
     };
     const onJoinError = (err) =>
       reject(new Error(`${name}: ${err.code} ${err.message}`));
@@ -157,9 +170,9 @@ const playerOf = (client, playerId) =>
   const ghost = await api('GET', '/api/rooms/NAOEXISTE', cookieA);
   expect(ghost.status === 404, 'GET de sala inexistente devolve 404');
 
-  const a = await makeClient('Alice', { pokeId: 25, cookie: cookieA });
-  const b = await makeClient('Bob', { pokeId: 6, cookie: cookieB });
-  const c = await makeClient('Carol', { role: 'spectator', pokeId: 1, cookie: cookieC });
+  const a = await makeClient('Alice', { cookie: cookieA });
+  const b = await makeClient('Bob', { cookie: cookieB });
+  const c = await makeClient('Carol', { role: 'spectator', cookie: cookieC });
   await sleep(200);
 
   expect(a.state.players.length === 3, 'tres jogadores na sala');
@@ -209,7 +222,7 @@ const playerOf = (client, playerId) =>
   b.socket.disconnect();
   await sleep(300);
 
-  const bob2 = await makeClient('Bob', { pokeId: 6, cookie: cookieB });
+  const bob2 = await makeClient('Bob', { cookie: cookieB });
   await sleep(250);
 
   expect(a.state.players.length === 3, 'reconexao NAO cria jogador duplicado');
@@ -234,9 +247,9 @@ const playerOf = (client, playerId) =>
   // outra aba continua com roomId/playerId apontando para um jogador que nao
   // existe mais.
   const cookieE = await signUp('Erin');
-  const tab1 = await makeClient('Erin', { pokeId: 7, cookie: cookieE });
+  const tab1 = await makeClient('Erin', { cookie: cookieE });
   // Mesmo cookie = mesma pessoa: e isto que faz as duas abas dividirem assento.
-  const tab2 = await makeClient('Erin', { pokeId: 7, cookie: cookieE });
+  const tab2 = await makeClient('Erin', { cookie: cookieE });
   await sleep(200);
   expect(tab2.playerId === tab1.playerId, 'duas abas compartilham um assento');
   expect(a.state.players.length === 3, 'a segunda aba nao adiciona jogador');
@@ -260,7 +273,7 @@ const playerOf = (client, playerId) =>
 
   // --- dois usuarios distintos com o MESMO nome de exibicao ---
   const cookieAlice2 = await signUp('Alice');
-  const alice2 = await makeClient('Alice', { pokeId: 25, cookie: cookieAlice2 });
+  const alice2 = await makeClient('Alice', { cookie: cookieAlice2 });
   await sleep(250);
   const alices = a.state.players.filter((p) => p.name === 'Alice');
   expect(alices.length === 2, 'dois usuarios com o mesmo nome ocupam dois assentos');
@@ -274,7 +287,6 @@ const playerOf = (client, playerId) =>
   // --- normalizacao de sala ---
   const cookieD = await signUp('Dave');
   const lower = await makeClient('Dave', {
-    pokeId: 4,
     room: ROOM.toLowerCase(),
     cookie: cookieD,
   });
@@ -289,7 +301,6 @@ const playerOf = (client, playerId) =>
     roomId: ROOM2,
     name: 'Dave',
     role: 'voter',
-    pokemon: samplePokemon('dave', 4),
   });
   await sleep(300);
   expect(
@@ -304,7 +315,6 @@ const playerOf = (client, playerId) =>
       roomId: 'NAOEXISTE',
       name: 'Alice',
       role: 'voter',
-      pokemon: samplePokemon('alice', 25),
     });
     setTimeout(() => resolve(null), 2000);
   });
@@ -335,6 +345,147 @@ const playerOf = (client, playerId) =>
     'sala favoritada aparece na home de quem nao e dono',
   );
   expect(favRow?.onlineCount >= 1, 'onlineCount reflete a memoria do servidor');
+
+  // --- XP: distancia, trava anti-farm, consenso e evolucao ---
+  // Sala propria: as rodadas aqui pontuam e nao podem contaminar as assercoes
+  // de cima, que dependem de estado de mesa.
+  const cookieX = await signUp('Xp1', { lineId: 'charmander' });
+  const cookieY = await signUp('Xp2', { lineId: 'squirtle' });
+  const cookieZ = await signUp('Xp3', { lineId: 'bulbasaur' });
+  const xpRoom = (await apiCreateRoom(cookieX, 'Sala de XP')).id;
+
+  const x = await makeClient('Xp1', { cookie: cookieX, room: xpRoom });
+  const y = await makeClient('Xp2', { cookie: cookieY, room: xpRoom });
+  const z = await makeClient('Xp3', { cookie: cookieZ, room: xpRoom });
+
+  const gainsOf = (client) =>
+    Object.fromEntries((client.roundResult?.xp ?? []).map((e) => [e.playerId, e.gained]));
+
+  async function playRound(votes) {
+    for (const [client, value] of votes) client.socket.emit('vote:cast', { value });
+    await sleep(120);
+    x.socket.emit('vote:reveal');
+    await sleep(200);
+  }
+  async function newRound() {
+    x.socket.emit('vote:reset');
+    await sleep(120);
+  }
+
+  // media 8.667 -> alvo fracionario 5.133 no deck -> 7 / 10 / 8
+  await playRound([[x, '5'], [y, '8'], [z, '13']]);
+  let gains = gainsOf(x);
+  expect(x.roundResult?.awarded === true, 'rodada com 3 votos numericos pontua');
+  expect(x.roundResult?.consensus === false, 'votos diferentes nao sao consenso');
+  expect(gains[x.playerId] === 7, `distancia: quem votou 5 leva 7 (levou ${gains[x.playerId]})`);
+  expect(gains[y.playerId] === 10, `distancia: quem votou 8 leva 10 (levou ${gains[y.playerId]})`);
+  expect(gains[z.playerId] === 8, `distancia: quem votou 13 leva 8 (levou ${gains[z.playerId]})`);
+
+  const xAfter = x.state.players.find((p) => p.id === x.playerId);
+  expect(xAfter?.progress?.xp === 7, 'o XP ganho aparece no room:state');
+  await newRound();
+
+  // Trava anti-farm: 2 votos numericos nao pontuam, nem sendo iguais.
+  await playRound([[x, '5'], [y, '5']]);
+  expect(x.roundResult?.awarded === false, 'menos de 3 votos numericos nao pontua');
+  expect(
+    Object.values(gainsOf(x)).every((g) => g === 0),
+    'ninguem ganha XP numa rodada travada',
+  );
+  await newRound();
+
+  // Consenso: dobro para todo mundo.
+  await playRound([[x, '3'], [y, '3'], [z, '3']]);
+  expect(x.roundResult?.consensus === true, 'todos na mesma carta e consenso');
+  expect(
+    Object.values(gainsOf(x)).every((g) => g === 20),
+    'consenso paga o dobro (20) para cada votante',
+  );
+  await newRound();
+
+  // Evolucao: consenso rende 20/rodada, entao 250 XP chega em 13 rodadas.
+  // Xp1 ja tem 27, faltam 12 rodadas (13 no total desta serie por folga).
+  const spriteBefore = x.state.players.find((p) => p.id === x.playerId).pokemon.id;
+  expect(spriteBefore === 4, 'Xp1 comeca como Charmander');
+  for (let i = 0; i < 12; i++) {
+    await playRound([[x, '8'], [y, '8'], [z, '8']]);
+    if (i < 11) await newRound();
+  }
+
+  const evolved = x.evolutions.filter((e) => e.playerId === x.playerId);
+  expect(evolved.length === 1, `exatamente uma evolucao de Xp1 (foram ${evolved.length})`);
+  expect(evolved[0]?.from.id === 4 && evolved[0]?.to.id === 5,
+    'a evolucao vai de Charmander para Charmeleon');
+
+  // O ADIAMENTO: o card ainda mostra a forma antiga ate a rodada seguinte,
+  // senao o room:state entregaria a evolucao antes de a animacao tocar.
+  const duringReveal = x.state.players.find((p) => p.id === x.playerId);
+  expect(duringReveal.pokemon.id === 4,
+    `a forma exibida so troca no reset (esta ${duringReveal.pokemon.id})`);
+  expect(duringReveal.progress.xp >= 250, 'mas o XP ja passou do limiar');
+
+  await newRound();
+  const afterReset = x.state.players.find((p) => p.id === x.playerId);
+  expect(afterReset.pokemon.id === 5, 'a forma nova aterrissa junto com a rodada nova');
+
+  // Eevee: cruza o limiar e NAO evolui sozinho; a pedra e uma escolha.
+  const cookieEv = await signUp('Eve', { lineId: 'eevee' });
+  const ev = await makeClient('Eve', { cookie: cookieEv, room: xpRoom });
+  for (let i = 0; i < 13; i++) {
+    await playRound([[x, '8'], [y, '8'], [z, '8'], [ev, '8']]);
+    await newRound();
+  }
+  const evPlayer = ev.state.players.find((p) => p.id === ev.playerId);
+  expect(evPlayer.progress.xp >= 250, 'Eevee acumulou XP suficiente');
+  expect(evPlayer.progress.pendingChoice === true, 'Eevee fica pendente da pedra');
+  expect(evPlayer.pokemon.id === 133, 'e continua Eevee ate escolher');
+  expect(
+    ev.evolutions.filter((e) => e.playerId === ev.playerId).length === 0,
+    'Eevee nao dispara evolucao sozinho',
+  );
+
+  const stone = await api('POST', `/api/trainer/pokemon/${evPlayer.progress.pokemonId}/branch`,
+    cookieEv, { dexId: 197 });
+  expect(stone.status === 200, 'escolher a pedra funciona');
+  await sleep(200);
+  const evolvedEv = ev.evolutions.filter((e) => e.playerId === ev.playerId);
+  expect(evolvedEv.length === 1 && evolvedEv[0].to.id === 197,
+    'a pedra dispara a evolucao para Umbreon na mesa inteira');
+
+  const stoneAgain = await api('POST',
+    `/api/trainer/pokemon/${evPlayer.progress.pokemonId}/branch`, cookieEv, { dexId: 134 });
+  expect(stoneAgain.status === 409, 'a pedra e definitiva (409 na segunda vez)');
+
+  // --- falha macia: sem inicial, entra e joga, so nao pontua ---
+  const cookieNone = await signUp('SemPoke', { lineId: null });
+  const none = await makeClient('SemPoke', { cookie: cookieNone, room: xpRoom });
+  await sleep(150);
+  const nonePlayer = none.state.players.find((p) => p.id === none.playerId);
+  expect(nonePlayer !== undefined, 'quem nao escolheu inicial entra na sala mesmo assim');
+  expect(nonePlayer.progress === null, 'e aparece sem progresso');
+  expect(nonePlayer.pokemon.sprite === '', 'com o sprite vazio, que vira Pokebola no cliente');
+
+  await playRound([[x, '5'], [y, '5'], [z, '5'], [none, '5']]);
+  expect(gainsOf(x)[none.playerId] === 0, 'quem nao tem Pokemon ganha 0 XP');
+  await newRound();
+
+  // --- teto de Pokemon por conta ---
+  const overLimit = await api('POST', '/api/trainer/pokemon', cookieX, { lineId: 'pichu' });
+  expect(overLimit.status === 409 && overLimit.body.error === 'POKEMON_LIMIT',
+    'segundo Pokemon e recusado com POKEMON_LIMIT');
+
+  // --- liberar esvazia a colecao e a mesa reflete na hora ---
+  const xPokemonId = x.state.players.find((p) => p.id === x.playerId).progress.pokemonId;
+  const released = await api('DELETE', `/api/trainer/pokemon/${xPokemonId}`, cookieX);
+  expect(released.status === 200 && released.body.pokemon.length === 0,
+    'liberar esvazia a colecao');
+  await sleep(200);
+  const xReleased = x.state.players.find((p) => p.id === x.playerId);
+  expect(xReleased.progress === null, 'a mesa reflete a liberacao na hora');
+  expect(xReleased !== undefined, 'e ninguem e expulso da sala por isso');
+
+  for (const client of [x, y, z, ev, none]) client.socket.disconnect();
+  await api('DELETE', `/api/rooms/${xpRoom}`, cookieX);
 
   // --- excluir expulsa todo mundo ---
   const closedPromise = new Promise((resolve) => {

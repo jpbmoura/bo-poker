@@ -5,6 +5,9 @@ import { Button } from '../components/ui/Button';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
 import { RoomCard } from '../components/RoomCard';
 import { signOut, useSession } from '../services/auth';
+import { TrainerBadge } from '../components/TrainerBadge';
+import { TrainerDialog } from '../components/TrainerDialog';
+import { useTrainer } from '../hooks/useTrainer';
 import { disconnectSocket } from '../services/socket';
 import { createRoom, listRooms, type RoomSummary } from '../services/rooms';
 import { normalizeRoomId } from '../types';
@@ -19,6 +22,8 @@ export default function HomePage() {
   const location = useLocation();
   const { data: session } = useSession();
 
+  const { active } = useTrainer();
+  const [trainerOpen, setTrainerOpen] = useState(false);
   const [code, setCode] = useState('');
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,6 +122,14 @@ export default function HomePage() {
 
           {session && (
             <div className="flex items-center gap-3 animate-fade-in">
+              {/* Mesmo badge do dropdown da sala: a home nao usa o TopActions. */}
+              <button
+                onClick={() => setTrainerOpen(true)}
+                title="Seu Pokémon"
+                className="hidden sm:flex w-[190px] px-2.5 py-1.5 rounded-lg hover:bg-surface-2 transition-colors"
+              >
+                <TrainerBadge pokemon={active} compact />
+              </button>
               <div className="text-right leading-tight">
                 <div className="text-xs text-muted truncate max-w-[160px]">
                   {session.user.name}
@@ -138,6 +151,8 @@ export default function HomePage() {
           )}
         </div>
       </header>
+
+      <TrainerDialog open={trainerOpen} onClose={() => setTrainerOpen(false)} />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-6 py-10">
         {notice && (

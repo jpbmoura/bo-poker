@@ -1,7 +1,5 @@
-import { Router, type NextFunction, type Request, type Response } from 'express';
-import { fromNodeHeaders } from 'better-auth/node';
+import { Router, type Request, type Response } from 'express';
 import type { Server } from 'socket.io';
-import { auth } from '../auth.js';
 import { Events } from '../socket/events.js';
 import { RoomManager } from '../rooms/RoomManager.js';
 import * as roomStore from '../rooms/roomStore.js';
@@ -11,6 +9,7 @@ import {
   normalizeRoomName,
   type RoomClosedPayload,
 } from '../types/index.js';
+import { dbError as sendDbError, requireUser, type AuthedRequest } from './session.js';
 
 /**
  * O que a home consome. NÃO vive no `wire.ts`: aquele arquivo é o contrato do
@@ -24,11 +23,6 @@ interface RoomSummary {
   isFavorite: boolean;
   onlineCount: number;
   createdAt: string;
-}
-
-interface AuthedRequest extends Request {
-  userId?: string;
-  userName?: string;
 }
 
 /**
@@ -61,14 +55,9 @@ function defaultRoomName(userName: string): string {
   return normalizeRoomName(first ? `Sala do ${first}` : 'Nova sala');
 }
 
-/**
- * Distingue "não achei" de "o banco piscou". Sem isso, uma oscilação do
- * Postgres apareceria para o usuário como "essa sala não existe" — e ele
- * apagaria o link achando que a sala tinha sumido.
- */
+/** Ver `routes/session.ts`: 503 nunca 404 — a diferença importa muito aqui. */
 function dbError(res: Response, err: unknown, context: string): void {
-  console.error(`[rooms] ${context}:`, (err as Error).message);
-  res.status(503).json({ error: 'DB_UNAVAILABLE' });
+  sendDbError(res, err, 'rooms', context);
 }
 
 /**
@@ -87,24 +76,7 @@ function dbError(res: Response, err: unknown, context: string): void {
 export function createRoomsRouter(io: Server): Router {
   const router = Router();
 
-  const requireUser = async (req: AuthedRequest, res: Response, next: NextFunction) => {
-    try {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(req.headers),
-      });
-      if (!session?.user) {
-        res.status(401).json({ error: 'UNAUTHENTICATED' });
-        return;
-      }
-      req.userId = session.user.id;
-      req.userName = session.user.name;
-      next();
-    } catch (err) {
-      dbError(res, err, 'falha ao resolver sessão');
-    }
-  };
-
-  router.use(requireUser as never);
+  router.use(requireUser('rooms') as never);
 
   /** Id da rota, já canonicalizado. Responde 400 e devolve null se for inválido. */
   const routeRoomId = (req: Request, res: Response): string | null => {

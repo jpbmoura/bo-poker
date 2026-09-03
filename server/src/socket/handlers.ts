@@ -5,8 +5,9 @@ import { Events } from './events.js';
 import { RoomManager } from '../rooms/RoomManager.js';
 import * as roomStore from '../rooms/roomStore.js';
 import type { Room } from '../rooms/Room.js';
-import { getForcedPokemon } from '../utils/forcedPokemon.js';
 import { config } from '../config.js';
+import { TrainerCache } from '../trainers/index.js';
+import { applyRoundXp } from '../trainers/awardRound.js';
 import {
   normalizePlayerName,
   normalizeRoomId,
@@ -15,7 +16,6 @@ import {
   type JoinPayload,
   type Player,
   type PlayerRole,
-  type Pokemon,
   type RoomError,
 } from '../types/index.js';
 
@@ -30,16 +30,6 @@ interface SocketData {
   playerId?: string;
   user?: AuthedUser;
   sessionExpiresAt?: number;
-}
-
-function isValidPokemon(p: unknown): p is Pokemon {
-  if (!p || typeof p !== 'object') return false;
-  const obj = p as Record<string, unknown>;
-  return (
-    typeof obj.id === 'number' &&
-    typeof obj.name === 'string' &&
-    typeof obj.sprite === 'string'
-  );
 }
 
 /**
@@ -121,6 +111,11 @@ export function registerSocketHandlers(io: Server): void {
       const user = session.user as { id: string; name: string; login?: string | null };
       data.user = { id: user.id, name: user.name, login: user.login ?? null };
       data.sessionExpiresAt = new Date(session.session.expiresAt).getTime();
+      // Uma leitura por CONEXÃO, e não por join, fora do caminho crítico. E
+      // `resolve` nunca lança: se o banco piscar, o socket conecta mesmo assim
+      // com estado degradado. Recusar aqui quebraria a invariante de que uma
+      // oscilação do Postgres não impede reconexão nem F5.
+      await TrainerCache.resolve(user.id);
       next();
     } catch {
       next(new Error('UNAUTHENTICATED'));
@@ -148,10 +143,6 @@ export function registerSocketHandlers(io: Server): void {
           code: 'INVALID_NAME',
           message: `Nome deve ter entre 1 e ${PLAYER_NAME_MAX_LENGTH} caracteres.`,
         });
-        return;
-      }
-      if (!isValidPokemon(payload.pokemon)) {
-        emitError(socket, { code: 'INVALID_POKEMON', message: 'Pokémon inválido.' });
         return;
       }
       const role: PlayerRole = payload.role === 'spectator' ? 'spectator' : 'voter';
@@ -215,17 +206,29 @@ export function registerSocketHandlers(io: Server): void {
       // coletada.
       const previous = data.roomId !== roomId ? detachFromRoom(socket, now) : null;
 
-      // Override de pokémon para nomes forçados, independente do que o cliente enviou.
-      const finalPokemon = getForcedPokemon(name) ?? payload.pokemon;
+      // O `io.use()` já aqueceu o cache; o `resolve` aqui é só rede de segurança
+      // para o caso frio. Ele nunca lança, e sem Pokémon o join SEGUE: quem
+      // ainda não escolheu entra com a Pokébola e ganha 0 XP. Quem barra a
+      // entrada é o portão de rota no cliente, não o servidor — um portão aqui
+      // exigiria ler o banco no caminho do join, e a falha dessa leitura não tem
+      // desfecho bom.
+      const trainerState =
+        TrainerCache.peek(user.id) ?? (await TrainerCache.resolve(user.id));
+      // O socket pode ter caído durante o await acima. Mesma armadilha da guarda
+      // anterior: um jogador `online: true` preso a um socket morto é
+      // incoletável e vaza a sala para sempre.
+      if (!socket.connected) return;
+      const trainer = TrainerCache.activePokemon(trainerState);
 
       const result = room.upsertPlayer({
         // Identidade autenticada: dois "Ana" são duas pessoas, e a mesma pessoa
         // reencontra o assento em qualquer aba ou máquina.
         identityKey: `user:${user.id}`,
         socketId: socket.id,
+        userId: user.id,
         name,
         login: user.login,
-        pokemon: finalPokemon,
+        trainer,
         role,
         now,
       });
@@ -272,7 +275,19 @@ export function registerSocketHandlers(io: Server): void {
         emitError(socket, { code: 'NOT_IN_ROOM', message: 'Você não está mais na sala.' });
         return;
       }
-      if (member.room.reveal()) broadcastRoomState(io, member.room);
+      // `reveal()` é one-shot: é ELE que garante que a rodada pontua exatamente
+      // uma vez, não nada dentro do award.
+      if (!member.room.reveal()) return;
+
+      const { result, evolutions } = applyRoundXp(member.room);
+
+      // O `room:state` sai PRIMEIRO: o cliente precisa do XP novo antes de
+      // renderizar o floater de `+N XP` e o overlay de evolução.
+      broadcastRoomState(io, member.room);
+      io.to(member.room.id).emit(Events.ROUND_RESULT, result);
+      for (const evolution of evolutions) {
+        io.to(member.room.id).emit(Events.POKEMON_EVOLVED, evolution);
+      }
     });
 
     socket.on(Events.VOTE_RESET, () => {

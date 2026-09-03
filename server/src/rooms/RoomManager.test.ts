@@ -6,9 +6,16 @@ import {
   normalizeRoomName,
   ROOM_NAME_MAX_LENGTH,
 } from '../types/index.js';
-import type { Pokemon } from '../types/index.js';
+import type { PokemonState } from '../trainers/trainerCache.js';
 
-const POKE: Pokemon = { id: 25, name: 'pikachu', sprite: 'p.png' };
+const TRAINER: PokemonState = {
+  id: 'pk1',
+  lineId: 'charmander',
+  branchId: null,
+  xp: 0,
+  isActive: true,
+  pendingXp: 0,
+};
 const T0 = 1_000_000;
 
 test('normalizeRoomId canonicaliza e rejeita o invalido', () => {
@@ -44,9 +51,10 @@ test('sweep remove offline vencido e apaga a sala que esvaziou', () => {
   room.upsertPlayer({
     identityKey: 'user:bob',
     socketId: 's1',
+    userId: 'bob',
     name: 'Bob',
     login: 'bob',
-    pokemon: POKE,
+    trainer: TRAINER,
     role: 'voter',
     now: T0,
   });
@@ -69,9 +77,10 @@ test('sweep devolve as salas que mudaram mas continuam vivas', () => {
     room.upsertPlayer({
       identityKey: `user:${name.toLowerCase()}`,
       socketId,
+      userId: name.toLowerCase(),
       name,
       login: name.toLowerCase(),
-      pokemon: POKE,
+      trainer: TRAINER,
       role: 'voter',
       now: T0,
     });
@@ -91,9 +100,10 @@ test('sala com todo mundo offline e apagada ao vencer o TTL', () => {
   const created = room.upsertPlayer({
     identityKey: 'user:bob',
     socketId: 's1',
+    userId: 'bob',
     name: 'Bob',
     login: 'bob',
-    pokemon: POKE,
+    trainer: TRAINER,
     role: 'voter',
     now: T0,
   });
