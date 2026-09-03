@@ -2,7 +2,6 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Server } from 'socket.io';
 import { auth } from '../auth.js';
-import { config } from '../config.js';
 import { Events } from '../socket/events.js';
 import { RoomManager } from '../rooms/RoomManager.js';
 import * as roomStore from '../rooms/roomStore.js';
@@ -73,28 +72,18 @@ function dbError(res: Response, err: unknown, context: string): void {
 }
 
 /**
- * Mesma expressão dos `trustedOrigins` em auth.ts. Precisa incluir a
- * `betterAuthUrl`: o scripts/smoke.mjs manda `Origin: http://localhost:3001`, e
- * sem ela toda chamada REST dele tomaria 403 por um motivo que não se parece em
- * nada com a causa.
+ * NÃO existe checagem de `Origin` aqui, e é de propósito. Uma tentativa anterior
+ * comparava o Origin do browser com `BETTER_AUTH_URL`/`CORS_ORIGIN` e recusava o
+ * PRÓPRIO app: no deploy de serviço único (o arranjo padrão, ver README) o
+ * cliente e a API dividem o domínio, então esta chamada é same-origin e qualquer
+ * divergência daquelas variáveis — uma barra no fim, `NODE_ENV` sem valor —
+ * derrubava a criação de sala em produção com um 403 indecifrável.
+ *
+ * A proteção real contra CSRF já é o `cors()` do index.ts: PATCH, DELETE e POST
+ * com JSON passam por preflight e são barrados para origem estranha. Sobra só um
+ * POST `form-urlencoded` cross-site, que o `express.json()` nem parseia — o
+ * estrago máximo é criar uma sala vazia na lista de quem foi enganado.
  */
-const trustedOrigins = new Set([config.betterAuthUrl, ...config.corsOrigin]);
-
-/**
- * As mutações são autenticadas por COOKIE, então valem uma checagem de origem.
- * O `cors()` já barra PATCH/DELETE e POST com JSON (todos passam por preflight),
- * mas um POST `form-urlencoded` de outro site não é pré-verificado — este
- * middleware fecha essa fresta.
- */
-function requireTrustedOrigin(req: Request, res: Response, next: NextFunction): void {
-  const origin = req.get('origin');
-  if (!origin || !trustedOrigins.has(origin)) {
-    res.status(403).json({ error: 'FORBIDDEN_ORIGIN' });
-    return;
-  }
-  next();
-}
-
 export function createRoomsRouter(io: Server): Router {
   const router = Router();
 
@@ -138,7 +127,7 @@ export function createRoomsRouter(io: Server): Router {
     }
   });
 
-  router.post('/', requireTrustedOrigin, async (req: AuthedRequest, res) => {
+  router.post('/', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const raw = typeof req.body?.name === 'string' ? req.body.name : '';
     const name = normalizeRoomName(raw) || defaultRoomName(req.userName ?? '');
@@ -166,7 +155,7 @@ export function createRoomsRouter(io: Server): Router {
     }
   });
 
-  router.patch('/:id', requireTrustedOrigin, async (req: AuthedRequest, res) => {
+  router.patch('/:id', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const id = routeRoomId(req, res);
     if (!id) return;
@@ -203,7 +192,7 @@ export function createRoomsRouter(io: Server): Router {
     }
   });
 
-  router.delete('/:id', requireTrustedOrigin, async (req: AuthedRequest, res) => {
+  router.delete('/:id', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const id = routeRoomId(req, res);
     if (!id) return;
@@ -233,7 +222,7 @@ export function createRoomsRouter(io: Server): Router {
     }
   });
 
-  router.put('/:id/favorite', requireTrustedOrigin, async (req: AuthedRequest, res) => {
+  router.put('/:id/favorite', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const id = routeRoomId(req, res);
     if (!id) return;
@@ -250,7 +239,7 @@ export function createRoomsRouter(io: Server): Router {
     }
   });
 
-  router.delete('/:id/favorite', requireTrustedOrigin, async (req: AuthedRequest, res) => {
+  router.delete('/:id/favorite', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const id = routeRoomId(req, res);
     if (!id) return;

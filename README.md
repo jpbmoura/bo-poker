@@ -172,7 +172,7 @@ O estado é serializado **na perspectiva de quem recebe** (`Room.serializeFor`):
 
 ## API HTTP de salas
 
-Tudo sob `/api/rooms`, autenticado pelo mesmo cookie de sessão do Better Auth. As mutações exigem `Origin` confiável (a mesma lista dos `trustedOrigins`).
+Tudo sob `/api/rooms`, autenticado pelo mesmo cookie de sessão do Better Auth.
 
 | Método | Rota | O que faz |
 |---|---|---|
@@ -184,6 +184,8 @@ Tudo sob `/api/rooms`, autenticado pelo mesmo cookie de sessão do Better Auth. 
 | `PUT`/`DELETE` | `/api/rooms/:id/favorite` | Favorita / desfavorita |
 
 Erro de banco responde **503**, nunca 404 — a diferença importa (ver a decisão logo abaixo).
+
+> **Sem checagem de `Origin` própria, de propósito.** No deploy de serviço único o cliente e a API dividem o domínio, então estas chamadas são *same-origin*. Uma versão anterior comparava o `Origin` do browser com `BETTER_AUTH_URL`/`CORS_ORIGIN` e recusava o próprio app em produção — bastava uma barra no fim da variável ou o `NODE_ENV` sem valor (aí `corsOrigin` cai no default de dev) para a criação de sala virar `403`. Quem protege contra CSRF é o `cors()`: PATCH, DELETE e POST com JSON passam por preflight. Sobra um POST `form-urlencoded` cross-site, que o `express.json()` nem parseia — no pior caso cria uma sala vazia.
 
 O `onlineCount` de cada sala vem da **memória** (`RoomManager`), não do banco: o Express roda no mesmo processo do estado das rodadas. A home revalida na montagem e no `focus` da janela; não existe canal de presença no socket.
 
