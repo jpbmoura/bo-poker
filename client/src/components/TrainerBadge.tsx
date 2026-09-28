@@ -46,7 +46,7 @@ export function TrainerBadge({ pokemon, compact = false, className }: TrainerBad
           <StagePips progress={progress} />
         </div>
         <XpBar progress={progress} className="mt-1.5" />
-        <div className="mt-1 text-[11px] font-mono text-subtle">
+        <div className="mt-1 text-[11px] font-mono text-subtle truncate">
           {progress.xp} XP · {xpCaption(progress)}
         </div>
       </div>
