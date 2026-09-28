@@ -99,7 +99,7 @@ export function TopActions({ me, onSignOut }: TopActionsProps) {
               className="mt-3 w-full flex items-center gap-2 px-2.5 py-2 -mx-0.5 rounded-lg text-xs text-muted hover:text-text hover:bg-surface-2 transition-colors"
             >
               <Sparkles size={13} />
-              Seu Pokémon
+              Meus Pokémon
             </button>
 
             <button

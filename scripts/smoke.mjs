@@ -469,10 +469,53 @@ const playerOf = (client, playerId) =>
   expect(gainsOf(x)[none.playerId] === 0, 'quem nao tem Pokemon ganha 0 XP');
   await newRound();
 
-  // --- teto de Pokemon por conta ---
+  // --- o inicial e a unica porta de graca ---
   const overLimit = await api('POST', '/api/trainer/pokemon', cookieX, { lineId: 'pichu' });
   expect(overLimit.status === 409 && overLimit.body.error === 'POKEMON_LIMIT',
-    'segundo Pokemon e recusado com POKEMON_LIMIT');
+    'segundo inicial e recusado com POKEMON_LIMIT');
+  const cookieWild = await signUp('Selvagem', { lineId: null });
+  const wildStarter = await api('POST', '/api/trainer/pokemon', cookieWild, { lineId: 'tauros' });
+  expect(wildStarter.status === 400 && wildStarter.body.error === 'INVALID_LINE',
+    'pokemon que nao e inicial nao se pega de graca');
+
+  // --- captura diaria ---
+  // Roda com qualquer CAPTURE_FORCE (ou nenhum): as assercoes valem para os dois
+  // desfechos. O inicial e escolhido para NAO ser a linha do dia.
+  const cookieCap = await signUp('Captura', { lineId: null });
+  const today = await api('GET', '/api/capture/today', cookieCap);
+  expect(today.status === 200 && today.body.status === 'available' && today.body.attempts === 0,
+    'captura do dia comeca disponivel, com 0 tentativas');
+  expect(today.body.chance > 0 && today.body.maxAttempts === 3, 'com chance e 3 tentativas');
+  const capStarter = ['charmander', 'squirtle'].find((l) => l !== today.body.lineId);
+  await api('POST', '/api/trainer/pokemon', cookieCap, { lineId: capStarter });
+
+  const staleDay = await api('POST', '/api/capture/today/attempt', cookieCap, { day: '2000-01-01' });
+  expect(staleDay.status === 409 && staleDay.body.error === 'DAY_CHANGED',
+    'tentativa de um dia que ja passou e recusada com DAY_CHANGED');
+
+  let caughtIt = false;
+  let thrown = 0;
+  for (let i = 0; i < 3 && !caughtIt; i++) {
+    const shot = await api('POST', '/api/capture/today/attempt', cookieCap, { day: today.body.day });
+    expect(shot.status === 200, `tentativa ${i + 1} aceita`);
+    thrown++;
+    expect(shot.body.capture.attempts === thrown, 'contador de tentativas avanca');
+    caughtIt = shot.body.success;
+    if (caughtIt) {
+      expect(shot.body.capture.status === 'caught', 'sucesso marca o dia como capturado');
+      const caught = shot.body.trainer.pokemon.find((p) => p.progress.lineId === today.body.lineId);
+      expect(shot.body.trainer.pokemon.length === 2, 'o capturado entra na colecao');
+      expect(caught?.progress.stage === today.body.stage, 'e nasce no estagio em que foi pego');
+      expect(caught?.isActive === false, 'sem tirar o ativo da mesa');
+    }
+  }
+  if (!caughtIt) {
+    const after = await api('GET', '/api/capture/today', cookieCap);
+    expect(after.body.status === 'fled', '3 falhas: o Pokemon foge');
+  }
+  const extra = await api('POST', '/api/capture/today/attempt', cookieCap, { day: today.body.day });
+  expect(extra.status === 409 && extra.body.error === 'NO_ATTEMPTS',
+    'depois de capturar ou gastar as 3, nao ha mais tentativa');
 
   // --- liberar esvazia a colecao e a mesa reflete na hora ---
   const xPokemonId = x.state.players.find((p) => p.id === x.playerId).progress.pokemonId;

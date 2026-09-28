@@ -11,7 +11,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "node --import tsx --test src/types/wire.test.ts src/data/pokedex.test.ts src/trainers/xp.test.ts src/trainers/species.test.ts src/trainers/trainerCache.test.ts src/rooms/Room.test.ts src/rooms/RoomManager.test.ts",
+    "test": "node --import tsx --test src/types/wire.test.ts src/data/pokedex.test.ts src/trainers/xp.test.ts src/trainers/species.test.ts src/trainers/trainerCache.test.ts src/capture/dailySpawn.test.ts src/rooms/Room.test.ts src/rooms/RoomManager.test.ts",
     "db:migrate": "node --import tsx src/db/migrate.ts"
   },
   "dependencies": {

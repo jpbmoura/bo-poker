@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid';
+import type { PoolClient } from 'pg';
 import { pool } from '../auth.js';
 
 /** Linha da tabela `trainer_pokemon`. */
@@ -31,22 +32,29 @@ export async function findById(id: string): Promise<PokemonRecord | null> {
   return rows[0] ?? null;
 }
 
+/**
+ * `start` existe para a captura: um Pokémon pego já evoluído nasce com o XP do
+ * estágio (e com o ramo, se for uma forma ramificada). `db` deixa a captura
+ * inserir dentro da transação dela.
+ */
 export async function create(
   userId: string,
   lineId: string,
   isActive: boolean,
+  start: { xp: number; branchId: number | null } = { xp: 0, branchId: null },
+  db: Pick<PoolClient, 'query'> = pool,
 ): Promise<PokemonRecord> {
-  const { rows } = await pool.query<PokemonRecord>(
-    `INSERT INTO "trainer_pokemon" ("id", "userId", "lineId", "isActive")
-     VALUES ($1, $2, $3, $4)
+  const { rows } = await db.query<PokemonRecord>(
+    `INSERT INTO "trainer_pokemon" ("id", "userId", "lineId", "isActive", "xp", "branchId")
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING ${COLUMNS}`,
-    [nanoid(12), userId, lineId, isActive],
+    [nanoid(12), userId, lineId, isActive, start.xp, start.branchId],
   );
   return rows[0];
 }
 
 /**
- * Escolha da pedra do Eevee. O `branchId is null` na cláusula faz a finalidade
+ * Escolha do ramo (a pedra do Eevee, Oddish, Wurmple…). O `branchId is null` na cláusula faz a finalidade
  * ser garantida pelo BANCO, não por uma checagem na aplicação que poderia perder
  * uma corrida entre duas abas.
  */
@@ -82,10 +90,6 @@ export async function addXp(id: string, delta: number): Promise<void> {
 /**
  * Troca o ativo em TRANSAÇÃO. O índice parcial é checado por statement, então
  * desligar todos antes de ligar o escolhido nunca conflita.
- *
- * Hoje ninguém exercita isto de verdade (só existe um Pokémon por conta), mas é
- * o ponto onde a troca vai acontecer quando o teto subir — melhor nascer certo
- * do que virar retrofit.
  */
 export async function setActive(userId: string, id: string): Promise<void> {
   const client = await pool.connect();

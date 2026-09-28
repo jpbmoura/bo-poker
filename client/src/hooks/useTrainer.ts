@@ -2,9 +2,8 @@ import { useEffect } from 'react';
 import { useTrainerStore, activeOf } from '../store/useTrainerStore';
 
 /**
- * A coleção do usuário. Expõe a LISTA e não um singular: hoje ela tem no máximo
- * um item, mas os componentes que consomem `active` continuam valendo quando o
- * teto subir, e `canAdd` é o que vai destravar o botão de adicionar.
+ * A coleção do usuário: a LISTA e o `active` (o que aparece na mesa). Novos
+ * Pokémon chegam pela captura diária; o inicial é só a primeira entrada.
  */
 export function useTrainer() {
   const collection = useTrainerStore((s) => s.collection);
@@ -18,14 +17,11 @@ export function useTrainer() {
   }, [load]);
 
   const pokemon = collection?.pokemon ?? [];
-  const maxPokemon = collection?.maxPokemon ?? 1;
 
   return {
     status,
     pokemon,
     active: activeOf(collection),
-    maxPokemon,
-    canAdd: pokemon.length < maxPokemon,
     /** Coleção vazia = precisa escolher o inicial. */
     needsStarter: status === 'ready' && pokemon.length === 0,
     apply,

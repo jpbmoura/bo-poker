@@ -1,13 +1,16 @@
 import { useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
+import { cn } from '../utils/cn';
 
 interface ConfettiProps {
   active: boolean;
+  /** Camada. Padrão z-40; a captura sobe para ficar acima do drawer. */
+  className?: string;
 }
 
 const COLORS = ['#ef4444', '#f5f5f4', '#f59e0b', '#fbbf24', '#fde68a'];
 
-export function Confetti({ active }: ConfettiProps) {
+export function Confetti({ active, className }: ConfettiProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fireRef = useRef<confetti.CreateTypes | null>(null);
 
@@ -68,7 +71,7 @@ export function Confetti({ active }: ConfettiProps) {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 z-40 w-full h-full"
+      className={cn('pointer-events-none fixed inset-0 z-40 w-full h-full', className)}
     />
   );
 }

@@ -71,7 +71,21 @@ test('progressAt no estágio final não tem próximo limiar', () => {
   assert.equal(progressAt(owned({ lineId: 'eevee', xp: 300, branchId: 134 }), 1)?.nextXp, null);
 });
 
+test('qualquer linha ramificada fica pendente no ponto do ramo', () => {
+  // Wurmple ramifica já no 1º limiar; Oddish só no 2º.
+  assert.equal(isPendingChoice(owned({ lineId: 'wurmple', xp: 250 })), true);
+  assert.equal(isPendingChoice(owned({ lineId: 'wurmple', xp: 250, branchId: 266 })), false);
+  assert.equal(isPendingChoice(owned({ lineId: 'oddish', xp: 250 })), false);
+  assert.equal(isPendingChoice(owned({ lineId: 'oddish', xp: 650 })), true);
+  assert.equal(formAt(owned({ lineId: 'oddish', xp: 650 }), 2, null)?.name, 'Gloom');
+});
+
+test('linha linear nunca fica pendente', () => {
+  assert.equal(isPendingChoice(owned({ xp: 10_000 })), false);
+  assert.equal(isPendingChoice(owned({ lineId: 'tauros', xp: 10_000 })), false);
+});
+
 test('linha desconhecida devolve null em vez de explodir', () => {
-  assert.equal(formAt(owned({ lineId: 'tauros' }), 0, null), null);
-  assert.equal(progressAt(owned({ lineId: 'tauros' }), 0), null);
+  assert.equal(formAt(owned({ lineId: 'missingno' }), 0, null), null);
+  assert.equal(progressAt(owned({ lineId: 'missingno' }), 0), null);
 });

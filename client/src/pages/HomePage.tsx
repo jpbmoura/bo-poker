@@ -7,6 +7,9 @@ import { RoomCard } from '../components/RoomCard';
 import { signOut, useSession } from '../services/auth';
 import { TrainerBadge } from '../components/TrainerBadge';
 import { TrainerDialog } from '../components/TrainerDialog';
+import { CaptureDrawer } from '../components/capture/CaptureDrawer';
+import { CaptureTab } from '../components/capture/CaptureTab';
+import { useCaptureStore } from '../store/useCaptureStore';
 import { useTrainer } from '../hooks/useTrainer';
 import { disconnectSocket } from '../services/socket';
 import { createRoom, listRooms, type RoomSummary } from '../services/rooms';
@@ -24,6 +27,9 @@ export default function HomePage() {
 
   const { active } = useTrainer();
   const [trainerOpen, setTrainerOpen] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const capture = useCaptureStore((s) => s.capture);
+  const loadCapture = useCaptureStore((s) => s.load);
   const [code, setCode] = useState('');
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,11 +80,17 @@ export default function HomePage() {
 
   // O "N online" é um retrato da memória do servidor. Revalidar ao voltar para
   // a aba mantém o indicador honesto sem inventar um canal de presença.
+  // A captura do dia vai junto: voltar para a aba depois da meia-noite já mostra
+  // o Pokémon novo.
   useEffect(() => {
-    const onFocus = () => void refresh();
+    void loadCapture();
+    const onFocus = () => {
+      void refresh();
+      void loadCapture();
+    };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [refresh]);
+  }, [refresh, loadCapture]);
 
   // Fora de uma sala não há assento a liberar, então basta encerrar a sessão.
   const handleSignOut = async () => {
@@ -125,7 +137,7 @@ export default function HomePage() {
               {/* Mesmo badge do dropdown da sala: a home nao usa o TopActions. */}
               <button
                 onClick={() => setTrainerOpen(true)}
-                title="Seu Pokémon"
+                title="Meus Pokémon"
                 className="hidden sm:flex w-[190px] px-2.5 py-1.5 rounded-lg hover:bg-surface-2 transition-colors"
               >
                 <TrainerBadge pokemon={active} compact />
@@ -153,6 +165,18 @@ export default function HomePage() {
       </header>
 
       <TrainerDialog open={trainerOpen} onClose={() => setTrainerOpen(false)} />
+
+      {capture && !captureOpen && (
+        <CaptureTab capture={capture} onOpen={() => setCaptureOpen(true)} />
+      )}
+      <CaptureDrawer
+        open={captureOpen}
+        onClose={() => setCaptureOpen(false)}
+        onOpenCollection={() => {
+          setCaptureOpen(false);
+          setTrainerOpen(true);
+        }}
+      />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-6 py-10">
         {notice && (

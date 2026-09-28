@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
 import { cn } from '../utils/cn';
 import {
-  EVOLUTION_LINES,
+  STARTER_LINES,
   XP_THRESHOLDS,
   spriteUrl,
   type EvolutionLine,
@@ -36,7 +36,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 /** Ordem de exibição: gerações na ordem, curingas (gen 0) por último. */
 function byGeneration(): Array<[number, EvolutionLine[]]> {
   const groups = new Map<number, EvolutionLine[]>();
-  for (const line of EVOLUTION_LINES) {
+  for (const line of STARTER_LINES) {
     const list = groups.get(line.gen) ?? [];
     list.push(line);
     groups.set(line.gen, list);
@@ -70,7 +70,7 @@ export default function StarterPage({ title }: StarterPageProps) {
     steps.forEach((step, i) => {
       elapsed += step;
       const t = window.setTimeout(() => {
-        setSelected(EVOLUTION_LINES[Math.floor(Math.random() * EVOLUTION_LINES.length)]);
+        setSelected(STARTER_LINES[Math.floor(Math.random() * STARTER_LINES.length)]);
         if (i === steps.length - 1) rollTimers.current = [];
       }, elapsed);
       rollTimers.current.push(t);
@@ -196,7 +196,7 @@ export default function StarterPage({ title }: StarterPageProps) {
                     {XP_THRESHOLDS[1]} XP →
                   </div>
                   <div className="flex -space-x-2">
-                    {selected.branches.map((b) => (
+                    {selected.branches.map(([b]) => (
                       <img
                         key={b.id}
                         src={spriteUrl(b.id)}

@@ -1,111 +1,16 @@
-import { Router, type Response } from 'express';
+import { Router } from 'express';
 import type { Server } from 'socket.io';
-import {
-  EEVEE_LINE_ID,
-  MAX_POKEMON_PER_USER,
-  findLine,
-  findBranch,
-  isValidLineId,
-} from '../data/pokedex.js';
-import { RoomManager } from '../rooms/RoomManager.js';
-import { Events } from '../socket/events.js';
-import { broadcastRoomState } from '../socket/handlers.js';
+import { findBranch, findLine, isStarterLine } from '../data/pokedex.js';
 import { TrainerCache, trainerStore } from '../trainers/index.js';
-import type { PokemonState } from '../trainers/trainerCache.js';
-import {
-  formAt,
-  isPendingChoice,
-  liveStage,
-  progressAt,
-} from '../trainers/species.js';
-import type { EvolutionEvent, Pokemon, TrainerProgress } from '../types/index.js';
+import { formAt, isPendingChoice, liveStage } from '../trainers/species.js';
 import { dbError, requireUser, type AuthedRequest } from './session.js';
-
-/**
- * O que o cliente consome. NÃO vive no `wire.ts`: aquele arquivo é o contrato do
- * socket e precisa continuar byte-idêntico entre os pacotes. Este DTO é HTTP e o
- * espelho dele está em `client/src/services/trainer.ts`.
- *
- * É uma COLEÇÃO desde já. Hoje ela tem no máximo um item, mas a forma da API é
- * a parte que mais custaria retrofitar depois — e custa nada agora.
- */
-interface TrainerPokemonDTO {
-  id: string;
-  isActive: boolean;
-  /** Espécie exibida FORA da mesa: aqui não há adiamento de cerimônia. */
-  form: Pokemon;
-  progress: TrainerProgress;
-}
-
-interface TrainerDTO {
-  pokemon: TrainerPokemonDTO[];
-  activeId: string | null;
-  maxPokemon: number;
-}
-
-function toDTO(p: PokemonState): TrainerPokemonDTO | null {
-  const stage = liveStage(p);
-  const form = formAt(p, stage, p.branchId);
-  const progress = progressAt(p, stage);
-  if (!form || !progress) return null;
-  return { id: p.id, isActive: p.isActive, form, progress };
-}
+import { refreshTrainerRooms, respondTrainer } from './trainerView.js';
 
 const trainerTag = 'trainer';
 
 export function createTrainerRouter(io: Server): Router {
   const router = Router();
   router.use(requireUser(trainerTag) as never);
-
-  /**
-   * Reflete na mesa uma mudança de conta. Sem adiamento: a pessoa acabou de
-   * clicar, não há animação a preservar.
-   *
-   * Repare que NINGUÉM é expulso da sala quando a coleção esvazia. O servidor
-   * falha macio: sem Pokémon o jogador segue sentado, aparece com a Pokébola e
-   * ganha 0 XP até escolher outro inicial — que o portão do cliente pede na hora.
-   */
-  function refreshRooms(
-    userId: string,
-    /**
-     * Quando a mudança É uma evolução (a escolha da pedra do Eevee), a mesa
-     * inteira também recebe a animação. Sem isto a evolução do Eevee seria a
-     * única silenciosa — ela não passa pelo award do reveal.
-     */
-    evolution?: { from: Pokemon; to: Pokemon },
-  ): void {
-    const identityKey = `user:${userId}`;
-    const state = TrainerCache.peek(userId);
-    const active = state ? TrainerCache.activePokemon(state) : null;
-    for (const room of RoomManager.roomsWithIdentity(identityKey)) {
-      room.refreshTrainer(identityKey, active);
-      broadcastRoomState(io, room);
-      if (!evolution) continue;
-      const player = room.findByIdentity(identityKey);
-      if (!player) continue;
-      const payload: EvolutionEvent = {
-        playerId: player.id,
-        playerName: player.name,
-        from: evolution.from,
-        to: evolution.to,
-        seq: 0,
-      };
-      io.to(room.id).emit(Events.POKEMON_EVOLVED, payload);
-    }
-  }
-
-  function respond(res: Response, userId: string): void {
-    const state = TrainerCache.peek(userId);
-    const pokemon = (state?.pokemon ?? [])
-      .map(toDTO)
-      .filter((p): p is TrainerPokemonDTO => p !== null);
-    const body: TrainerDTO = {
-      pokemon,
-      activeId: pokemon.find((p) => p.isActive)?.id ?? null,
-      maxPokemon: MAX_POKEMON_PER_USER,
-    };
-    res.json(body);
-  }
 
   /**
    * Coleção vazia responde **200 com lista vazia**, não 404: uma coleção vazia é
@@ -118,35 +23,40 @@ export function createTrainerRouter(io: Server): Router {
     try {
       // Cache primeiro, banco só se estiver frio — mesma regra do room:join.
       if (!TrainerCache.peek(userId)) await TrainerCache.resolve(userId);
-      respond(res, userId);
+      respondTrainer(res, userId);
     } catch (err) {
       dbError(res, err, trainerTag, 'falha ao ler treinador');
     }
   });
 
+  /**
+   * Escolha do INICIAL. É a única porta de entrada de graça, então só vale com a
+   * coleção vazia e só para as linhas da tela de escolha — qualquer outro
+   * Pokémon se ganha capturando (`/api/capture`).
+   */
   router.post('/pokemon', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const lineId = typeof req.body?.lineId === 'string' ? req.body.lineId : '';
-    if (!isValidLineId(lineId)) {
+    if (!isStarterLine(lineId)) {
       res.status(400).json({ error: 'INVALID_LINE' });
       return;
     }
     try {
       const state = TrainerCache.peek(userId) ?? (await TrainerCache.resolve(userId));
-      if (state.pokemon.length >= MAX_POKEMON_PER_USER) {
+      if (state.pokemon.length > 0) {
         res.status(409).json({ error: 'POKEMON_LIMIT' });
         return;
       }
       const row = await trainerStore.create(userId, lineId, state.pokemon.length === 0);
       TrainerCache.put(userId, row);
-      refreshRooms(userId);
-      respond(res, userId);
+      refreshTrainerRooms(io, userId);
+      respondTrainer(res, userId);
     } catch (err) {
       dbError(res, err, trainerTag, 'falha ao adicionar pokémon');
     }
   });
 
-  /** Hoje é sempre no-op (só existe um), mas é o ponto da troca no futuro. */
+  /** Troca o Pokémon que aparece na mesa. */
   router.post('/pokemon/:id/active', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const id = req.params.id;
@@ -159,8 +69,8 @@ export function createTrainerRouter(io: Server): Router {
       await trainerStore.setActive(userId, id);
       const row = await trainerStore.findById(id);
       if (row) TrainerCache.put(userId, row);
-      refreshRooms(userId);
-      respond(res, userId);
+      refreshTrainerRooms(io, userId);
+      respondTrainer(res, userId);
     } catch (err) {
       dbError(res, err, trainerTag, 'falha ao trocar o pokémon ativo');
     }
@@ -178,7 +88,7 @@ export function createTrainerRouter(io: Server): Router {
         return;
       }
       const line = findLine(owned.lineId);
-      if (!line || line.id !== EEVEE_LINE_ID || !findBranch(line, dexId)) {
+      if (!line?.branches || !findBranch(line, dexId)) {
         res.status(400).json({ error: 'INVALID_BRANCH' });
         return;
       }
@@ -194,16 +104,16 @@ export function createTrainerRouter(io: Server): Router {
         return;
       }
       const updated = TrainerCache.put(userId, row);
-      const from = formAt(owned, 0, null);
+      const from = formAt(owned, liveStage(owned), null);
       const to = formAt(updated, liveStage(updated), updated.branchId);
-      refreshRooms(userId, from && to ? { from, to } : undefined);
-      respond(res, userId);
+      refreshTrainerRooms(io, userId, from && to ? { from, to } : undefined);
+      respondTrainer(res, userId);
     } catch (err) {
       dbError(res, err, trainerTag, 'falha ao escolher a evolução');
     }
   });
 
-  /** Liberar. Hoje é o "resetar": solta o único e a coleção volta a ficar vazia. */
+  /** Liberar. Soltar o último esvazia a coleção e o portão do inicial volta. */
   router.delete('/pokemon/:id', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const id = req.params.id;
@@ -218,8 +128,8 @@ export function createTrainerRouter(io: Server): Router {
       // Sobrou algum? Promove no banco também, para o cache não divergir.
       const promoted = TrainerCache.peek(userId)?.pokemon.find((p) => p.isActive);
       if (promoted) await trainerStore.setActive(userId, promoted.id);
-      refreshRooms(userId);
-      respond(res, userId);
+      refreshTrainerRooms(io, userId);
+      respondTrainer(res, userId);
     } catch (err) {
       dbError(res, err, trainerTag, 'falha ao liberar o pokémon');
     }

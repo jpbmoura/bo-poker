@@ -1,0 +1,109 @@
+import { pool } from '../auth.js';
+import { CAPTURE_ATTEMPTS, xpForStage, type WildSpecies } from '../data/pokedex.js';
+import * as trainerStore from '../trainers/trainerStore.js';
+import type { PokemonRecord } from '../trainers/trainerStore.js';
+
+/** Linha da tabela `daily_capture`. */
+export interface DailyCaptureRecord {
+  attempts: number;
+  caught: boolean;
+}
+
+export async function getDay(userId: string, day: string): Promise<DailyCaptureRecord | null> {
+  const { rows } = await pool.query<DailyCaptureRecord>(
+    `SELECT "attempts", "caught" FROM "daily_capture"
+      WHERE "userId" = $1 AND "day" = $2`,
+    [userId, day],
+  );
+  return rows[0] ?? null;
+}
+
+export type AttemptOutcome =
+  | { kind: 'owned' }
+  | { kind: 'exhausted' }
+  | { kind: 'thrown'; attempts: number; success: boolean; pokemon: PokemonRecord | null };
+
+/**
+ * Uma Pokébola lançada, numa transação só:
+ *
+ * 1. Recusa se o usuário já tem a linha — checado DENTRO da transação, para a
+ *    captura não passar entre a leitura do GET e o clique.
+ * 2. Gasta a tentativa com um upsert CONDICIONAL. O `where attempts < N and not
+ *    caught` faz o limite ser garantido pelo banco: duas abas clicando juntas
+ *    nunca conseguem a 4ª.
+ * 3. Só então sorteia. Acertou: o Pokémon nasce no estágio em que foi capturado
+ *    e a linha do dia fica marcada como `caught`.
+ *
+ * `roll` é injetado para o route decidir (sorteio de verdade ou CAPTURE_FORCE).
+ */
+export async function attempt(
+  userId: string,
+  day: string,
+  species: WildSpecies,
+  roll: () => boolean,
+): Promise<AttemptOutcome> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const owned = await client.query(
+      'SELECT 1 FROM "trainer_pokemon" WHERE "userId" = $1 AND "lineId" = $2 LIMIT 1',
+      [userId, species.lineId],
+    );
+    if ((owned.rowCount ?? 0) > 0) {
+      // Quem capturou HOJE também "tem a linha" — mas para ele a resposta certa
+      // é "acabou por hoje", não "você já tem esse".
+      const today = await client.query<{ caught: boolean }>(
+        'SELECT "caught" FROM "daily_capture" WHERE "userId" = $1 AND "day" = $2',
+        [userId, day],
+      );
+      await client.query('ROLLBACK');
+      return today.rows[0]?.caught ? { kind: 'exhausted' } : { kind: 'owned' };
+    }
+
+    const spent = await client.query<{ attempts: number }>(
+      `INSERT INTO "daily_capture" ("userId", "day", "attempts")
+       VALUES ($1, $2, 1)
+       ON CONFLICT ("userId", "day") DO UPDATE
+          SET "attempts" = "daily_capture"."attempts" + 1, "updatedAt" = now()
+        WHERE "daily_capture"."attempts" < $3 AND NOT "daily_capture"."caught"
+       RETURNING "attempts"`,
+      [userId, day, CAPTURE_ATTEMPTS],
+    );
+    const attempts = spent.rows[0]?.attempts;
+    if (attempts === undefined) {
+      await client.query('ROLLBACK');
+      return { kind: 'exhausted' };
+    }
+
+    const success = roll();
+    let pokemon: PokemonRecord | null = null;
+    if (success) {
+      const hasAny = await client.query(
+        'SELECT 1 FROM "trainer_pokemon" WHERE "userId" = $1 LIMIT 1',
+        [userId],
+      );
+      pokemon = await trainerStore.create(
+        userId,
+        species.lineId,
+        (hasAny.rowCount ?? 0) === 0,
+        { xp: xpForStage(species.stage), branchId: species.branchId },
+        client,
+      );
+      await client.query(
+        `UPDATE "daily_capture"
+            SET "caught" = true, "caughtPokemonId" = $3, "updatedAt" = now()
+          WHERE "userId" = $1 AND "day" = $2`,
+        [userId, day, pokemon.id],
+      );
+    }
+
+    await client.query('COMMIT');
+    return { kind: 'thrown', attempts, success, pokemon };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}

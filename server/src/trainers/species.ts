@@ -1,5 +1,4 @@
 import {
-  EEVEE_LINE_ID,
   findLine,
   maxStage,
   nextThreshold,
@@ -32,11 +31,14 @@ export function liveStage(p: OwnedPokemon): number {
 }
 
 /**
- * Eevee que já cruzou o limiar mas ainda não escolheu a pedra. Enquanto isto for
- * verdade ele PERMANECE Eevee — a evolução dele não acontece sozinha.
+ * Linha ramificada (Eevee, Oddish, Wurmple…) que já cruzou o ponto do ramo mas
+ * ainda não escolheu qual seguir. Enquanto isto for verdade ele PERMANECE na
+ * última forma linear — a evolução dele não acontece sozinha.
  */
 export function isPendingChoice(p: OwnedPokemon): boolean {
-  return p.lineId === EEVEE_LINE_ID && p.branchId === null && liveStage(p) >= 1;
+  const line = findLine(p.lineId);
+  if (!line?.branches || p.branchId !== null) return false;
+  return liveStage(p) >= line.stages.length;
 }
 
 /**

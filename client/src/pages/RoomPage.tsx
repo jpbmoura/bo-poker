@@ -11,7 +11,7 @@ import { IconSidebar } from '../components/IconSidebar';
 import { TopActions } from '../components/TopActions';
 import { SettingsDialog } from '../components/SettingsDialog';
 import { EvolutionOverlay } from '../components/EvolutionOverlay';
-import { EeveeStoneDialog } from '../components/EeveeStoneDialog';
+import { BranchChoiceDialog } from '../components/BranchChoiceDialog';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
 import { Button } from '../components/ui/Button';
 import { cn } from '../utils/cn';
@@ -211,9 +211,9 @@ export default function RoomPage() {
     return map;
   }, [roundResult]);
 
-  // O seletor de pedra é só do dono do Eevee: a condição sai do progresso do
-  // PRÓPRIO jogador, nunca da mesa.
-  const needsStone =
+  // O seletor de ramo (pedra do Eevee, Oddish, Wurmple…) é só do dono: a
+  // condição sai do progresso do PRÓPRIO jogador, nunca da mesa.
+  const needsBranch =
     myPlayer?.progress?.pendingChoice === true && trainerActive !== null;
 
   // O servidor manda o estado ja na perspectiva de quem recebe: cada jogador ve
@@ -337,7 +337,7 @@ export default function RoomPage() {
       {/* Acima do Confetti (z-40) e do Dialog (z-50): ver EvolutionOverlay. */}
       <EvolutionOverlay />
 
-      {needsStone && trainerActive && <EeveeStoneDialog pokemon={trainerActive} />}
+      {needsBranch && trainerActive && <BranchChoiceDialog pokemon={trainerActive} />}
 
       <SettingsDialog
         open={settingsOpen}

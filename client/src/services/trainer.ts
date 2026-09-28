@@ -6,8 +6,7 @@ import type { Pokemon, TrainerProgress } from '../types';
  * motivo do `RoomSummary`: aquele é o contrato do socket e precisa continuar
  * byte-idêntico entre os pacotes.
  *
- * É uma COLEÇÃO. Hoje `maxPokemon` é 1 e a lista tem no máximo um item, mas
- * nada no caminho assume isso.
+ * Também é o que a captura devolve num sucesso (`services/capture.ts`).
  */
 export interface TrainerPokemon {
   id: string;
@@ -19,7 +18,8 @@ export interface TrainerPokemon {
 export interface TrainerCollection {
   pokemon: TrainerPokemon[];
   activeId: string | null;
-  maxPokemon: number;
+  /** Null = sem limite. */
+  maxPokemon: number | null;
 }
 
 export function getTrainer(): Promise<TrainerCollection> {
@@ -41,7 +41,7 @@ export function chooseBranch(id: string, dexId: number): Promise<TrainerCollecti
   );
 }
 
-/** Liberar. Hoje é o "recomeçar do zero": solta o único e a coleção esvazia. */
+/** Liberar. Soltar o último esvazia a coleção e o portão do inicial volta. */
 export function releasePokemon(id: string): Promise<TrainerCollection> {
   return request<TrainerCollection>(`/api/trainer/pokemon/${id}`, mutation('DELETE'));
 }

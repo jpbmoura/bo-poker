@@ -41,6 +41,17 @@ if (devPasswordAuth && isProduction) {
   );
 }
 
+/**
+ * Força o resultado das tentativas de captura, para testar a animação e o smoke
+ * sem depender da sorte. Mesmo cuidado do password auth: nunca em produção.
+ */
+const rawCaptureForce = process.env.CAPTURE_FORCE;
+const captureForce =
+  rawCaptureForce === 'success' || rawCaptureForce === 'fail' ? rawCaptureForce : null;
+if (captureForce && isProduction) {
+  throw new Error('[config] CAPTURE_FORCE não pode estar ligado com NODE_ENV=production.');
+}
+
 const betterAuthUrl = process.env.BETTER_AUTH_URL || 'http://localhost:3001';
 
 /**
@@ -76,4 +87,11 @@ export const config = {
   githubClientId: required('GITHUB_CLIENT_ID', process.env.GITHUB_CLIENT_ID),
   githubClientSecret: required('GITHUB_CLIENT_SECRET', process.env.GITHUB_CLIENT_SECRET),
   devPasswordAuth,
+
+  /**
+   * Sal do sorteio do Pokémon do dia. Sem ele o pokémon de qualquer data futura
+   * é calculável lendo o código; com ele, só quem tem o env sabe.
+   */
+  captureSalt: process.env.CAPTURE_SALT ?? '',
+  captureForce,
 };
