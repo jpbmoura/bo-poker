@@ -59,3 +59,25 @@ export function clearSession(userId: string, roomId: string): void {
     // nada a fazer
   }
 }
+
+/**
+ * Último papel escolhido no diálogo de entrada, por navegador. Quem sempre
+ * entra só para assistir (PO, gestor) não precisa trocar toda vez.
+ */
+const ROLE_PREF_KEY = 'bo-poker:preferred-role';
+
+export function readPreferredRole(): PlayerRole {
+  try {
+    return localStorage.getItem(ROLE_PREF_KEY) === 'spectator' ? 'spectator' : 'voter';
+  } catch {
+    return 'voter';
+  }
+}
+
+export function writePreferredRole(role: PlayerRole): void {
+  try {
+    localStorage.setItem(ROLE_PREF_KEY, role);
+  } catch {
+    // sem persistência: volta ao padrão "voter" na próxima vez
+  }
+}

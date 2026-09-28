@@ -364,6 +364,7 @@ export function PokerTable({
                 </div>
                 <span className="text-[11px] text-muted truncate max-w-[100px]">
                   {s.name}
+                  {s.id === myPlayerId && <span className="text-subtle"> (você)</span>}
                 </span>
               </div>
             ))}

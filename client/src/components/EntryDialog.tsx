@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useId, useRef, useState } from 'react';
+import { Eye, Hand } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { PokeballIcon } from './ui/PokeballIcon';
@@ -6,6 +7,8 @@ import { PLAYER_NAME_MAX_LENGTH } from '../types';
 import type { PlayerRole, RoomError } from '../types';
 import { updateUser, useSession } from '../services/auth';
 import { useTrainer } from '../hooks/useTrainer';
+import { readPreferredRole, writePreferredRole } from '../services/session';
+import { cn } from '../utils/cn';
 
 interface EntryDialogProps {
   open: boolean;
@@ -38,6 +41,8 @@ export function EntryDialog({
     .slice(0, PLAYER_NAME_MAX_LENGTH);
 
   const [name, setName] = useState(githubFirstName);
+  const [role, setRole] = useState<PlayerRole>(readPreferredRole);
+  const nameId = useId();
 
   // A sessão resolve de forma assíncrona; preenche assim que chegar, sem
   // atropelar o que a pessoa já tiver digitado.
@@ -59,7 +64,8 @@ export function EntryDialog({
     if (finalName !== session?.user?.name) {
       void updateUser({ name: finalName }).catch(() => undefined);
     }
-    onSubmit({ name: finalName, role: 'voter' });
+    writePreferredRole(role);
+    onSubmit({ name: finalName, role });
   };
 
   return (
@@ -75,10 +81,11 @@ export function EntryDialog({
           <span className="font-mono">{roomId}</span>
         </p>
 
-        <label className="block text-xs uppercase tracking-wider text-subtle mb-2">
+        <label htmlFor={nameId} className="block text-xs uppercase tracking-wider text-subtle mb-2">
           Seu nome
         </label>
         <input
+          id={nameId}
           type="text"
           value={name}
           onChange={(e) => {
@@ -90,6 +97,28 @@ export function EntryDialog({
           maxLength={PLAYER_NAME_MAX_LENGTH}
           autoFocus
         />
+
+        <div className="text-xs uppercase tracking-wider text-subtle mb-2" id={`${nameId}-role`}>
+          Como você vai participar
+        </div>
+        <div
+          role="radiogroup"
+          aria-labelledby={`${nameId}-role`}
+          className="grid grid-cols-2 gap-1 p-1 mb-6 rounded-lg bg-surface-2 border border-border"
+        >
+          <RoleOption
+            active={role === 'voter'}
+            onSelect={() => setRole('voter')}
+            icon={<Hand size={14} />}
+            label="Votar"
+          />
+          <RoleOption
+            active={role === 'spectator'}
+            onSelect={() => setRole('spectator')}
+            icon={<Eye size={14} />}
+            label="Só assistir"
+          />
+        </div>
 
         {/*
           O Pokémon não se escolhe mais aqui: ele é da CONTA e evolui com o XP.
@@ -137,5 +166,36 @@ export function EntryDialog({
         </Button>
       </form>
     </Dialog>
+  );
+}
+
+function RoleOption({
+  active,
+  onSelect,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onSelect: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onSelect}
+      className={cn(
+        'flex items-center justify-center gap-2 py-2 rounded-md text-sm transition-colors duration-fast',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight/70',
+        active
+          ? 'bg-surface-4 text-text shadow-[0_1px_2px_rgba(0,0,0,0.3)]'
+          : 'text-muted hover:text-text',
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

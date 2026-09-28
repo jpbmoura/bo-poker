@@ -12,11 +12,17 @@ import { TopActions } from '../components/TopActions';
 import { SettingsDialog } from '../components/SettingsDialog';
 import { EvolutionOverlay } from '../components/EvolutionOverlay';
 import { BranchChoiceDialog } from '../components/BranchChoiceDialog';
+import { Eye } from 'lucide-react';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
 import { Button } from '../components/ui/Button';
 import { cn } from '../utils/cn';
 import { computeStats, someoneVoted as anyoneVoted } from '../utils/stats';
-import { clearSession, readSession } from '../services/session';
+import {
+  clearSession,
+  readSession,
+  writePreferredRole,
+  writeSession,
+} from '../services/session';
 import { signOut, useSession } from '../services/auth';
 import { useTrainer } from '../hooks/useTrainer';
 import { disconnectSocket } from '../services/socket';
@@ -47,7 +53,7 @@ export default function RoomPage() {
 
   // Sem canonicalizar, /room/abc e /room/ABC eram salas diferentes.
   const roomId = normalizeRoomId(rawRoomId) ?? '';
-  const { join, leave, castVote, reveal, reset, clearInactive } = useRoom(roomId);
+  const { join, leave, castVote, reveal, reset, clearInactive, setRole } = useRoom(roomId);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   // O prefetch REST existe para UX: você descobre que a sala nao existe ANTES
@@ -68,6 +74,8 @@ export default function RoomPage() {
   const roundResult = useRoomStore((s) => s.roundResult);
   const setCeremonyBusy = useRoomStore((s) => s.setCeremonyBusy);
   const setEntryData = useRoomStore((s) => s.setEntryData);
+  const setMyRole = useRoomStore((s) => s.setRole);
+  const myName = useRoomStore((s) => s.myName);
   const resetStore = useRoomStore((s) => s.reset);
 
   useEffect(() => {
@@ -236,7 +244,29 @@ export default function RoomPage() {
   // -- a carta destacada e sempre a que o servidor registrou de fato.
   const myVote = (myPlayer?.vote ?? null) as CardValue | null;
 
-  const deckDisabled = !joined || revealed;
+  // O papel verdadeiro é o que o servidor devolve no estado: o re-join ignora o
+  // `role` do payload (Room.ts), então o store local pode estar defasado.
+  const myRole: PlayerRole = myPlayer?.role ?? 'voter';
+  const isSpectator = myRole === 'spectator';
+
+  const handleToggleRole = () => {
+    if (revealed) return;
+    const next: PlayerRole = isSpectator ? 'voter' : 'spectator';
+    const hadVote = myPlayer?.vote != null;
+    setRole(next);
+    setMyRole(next);
+    writePreferredRole(next);
+    if (userId && myName) writeSession(userId, roomId, { name: myName, role: next });
+    toast.info(
+      next === 'spectator'
+        ? hadVote
+          ? 'Você está só assistindo. Seu voto desta rodada foi descartado.'
+          : 'Você está só assistindo.'
+        : 'Você voltou a votar.',
+    );
+  };
+
+  const deckDisabled = !joined || revealed || isSpectator;
 
   const canReveal = !revealed && anyoneVoted(players);
 
@@ -297,8 +327,11 @@ export default function RoomPage() {
         onLeave={handleLeave}
         onHome={() => navigate('/')}
         onToggleFavorite={handleToggleFavorite}
+        onToggleRole={handleToggleRole}
         hasInactive={hasInactive}
         isFavorite={isFavorite}
+        role={myRole}
+        roleLocked={revealed}
       />
 
       <TopActions me={myPlayer} onSignOut={handleSignOut} />
@@ -395,12 +428,30 @@ export default function RoomPage() {
 
             {/* Bottom deck */}
             <div className="pb-8 pt-4">
-              <CardDeck
-                sequence={sequence}
-                selected={myVote}
-                disabled={deckDisabled}
-                onSelect={castVote}
-              />
+              {isSpectator ? (
+                <div className="flex justify-center animate-fade-up">
+                  <div className="flex items-center gap-3 pl-4 pr-1.5 py-1.5 rounded-full bg-surface-2/80 border border-border text-sm text-muted">
+                    <Eye size={15} className="text-subtle" />
+                    Você está só assistindo
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={handleToggleRole}
+                      disabled={revealed}
+                    >
+                      Entrar na votação
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <CardDeck
+                  sequence={sequence}
+                  selected={myVote}
+                  disabled={deckDisabled}
+                  onSelect={castVote}
+                />
+              )}
               <div className="mt-4 flex justify-center">
                 <span className="px-3 py-1 text-[11px] font-mono text-subtle border border-border rounded-full">
                   {roomState?.name ?? 'Sala'} ·{' '}

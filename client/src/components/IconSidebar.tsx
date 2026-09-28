@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link2, Settings, LogOut, Check, Eraser, Star } from 'lucide-react';
+import { Link2, Settings, LogOut, Check, Eraser, Star, Eye, Hand } from 'lucide-react';
+import type { PlayerRole } from '../types';
 import { cn } from '../utils/cn';
 import { PokeballIcon } from './ui/PokeballIcon';
 
@@ -10,8 +11,12 @@ interface IconSidebarProps {
   onLeave: () => void;
   onHome: () => void;
   onToggleFavorite: () => void;
+  onToggleRole: () => void;
   hasInactive: boolean;
   isFavorite: boolean;
+  role: PlayerRole;
+  /** O servidor recusa troca de papel com as cartas abertas. */
+  roleLocked: boolean;
 }
 
 export function IconSidebar({
@@ -21,8 +26,11 @@ export function IconSidebar({
   onLeave,
   onHome,
   onToggleFavorite,
+  onToggleRole,
   hasInactive,
   isFavorite,
+  role,
+  roleLocked,
 }: IconSidebarProps) {
   const [copied, setCopied] = useState(false);
   const [cleared, setCleared] = useState(false);
@@ -103,6 +111,21 @@ export function IconSidebar({
         ) : (
           <Eraser size={16} />
         )}
+      </SidebarButton>
+
+      {/* O ícone mostra o papel ATUAL; o título diz o que o clique faz. */}
+      <SidebarButton
+        onClick={onToggleRole}
+        disabled={roleLocked}
+        title={
+          roleLocked
+            ? 'Troque de papel na próxima rodada'
+            : role === 'spectator'
+              ? 'Voltar a votar'
+              : 'Só assistir'
+        }
+      >
+        {role === 'spectator' ? <Eye size={16} /> : <Hand size={16} />}
       </SidebarButton>
 
       <SidebarButton onClick={onOpenSettings} title="Configurações">
