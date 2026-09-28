@@ -21,6 +21,7 @@ import { signOut, useSession } from '../services/auth';
 import { useTrainer } from '../hooks/useTrainer';
 import { disconnectSocket } from '../services/socket';
 import { normalizeRoomId } from '../types';
+import { toast } from '../store/useToastStore';
 import {
   deleteRoom,
   getRoom,
@@ -134,6 +135,17 @@ export default function RoomPage() {
     navigate('/', { replace: true, state: { notice: 'ROOM_DELETED' } });
   }, [closed, userId, roomId, resetStore, navigate]);
 
+  // Depois do join o EntryDialog some, então erros do servidor (ex.: "Você não
+  // está mais na sala") só apareceriam no store. Mostra como toast.
+  useEffect(() => {
+    if (joined && error && error.code !== 'ROOM_NOT_FOUND') toast.error(error.message);
+  }, [joined, error]);
+
+  const handleClearInactive = () => {
+    clearInactive();
+    toast.success('Jogadores inativos removidos da mesa');
+  };
+
   const handleEntry = (data: { name: string; role: PlayerRole }) => {
     setEntryData(data);
     join(data.name, data.role);
@@ -161,8 +173,10 @@ export default function RoomPage() {
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
+      toast.success('Link copiado. Mande para o time.');
       return true;
     } catch {
+      toast.error('Não foi possível copiar o link.');
       return false;
     }
   };
@@ -176,6 +190,7 @@ export default function RoomPage() {
       await setFavorite(roomId, next);
     } catch {
       setIsFavorite(!next);
+      toast.error('Não foi possível atualizar os favoritos. Tente de novo.');
     }
   };
 
@@ -278,7 +293,7 @@ export default function RoomPage() {
       <IconSidebar
         onCopyLink={handleCopyLink}
         onOpenSettings={() => setSettingsOpen(true)}
-        onClearInactive={clearInactive}
+        onClearInactive={handleClearInactive}
         onLeave={handleLeave}
         onHome={() => navigate('/')}
         onToggleFavorite={handleToggleFavorite}

@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, LogOut, Plus, X } from 'lucide-react';
+import { ArrowRight, LogOut, Plus } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
 import { RoomCard } from '../components/RoomCard';
@@ -14,6 +14,7 @@ import { useTrainer } from '../hooks/useTrainer';
 import { disconnectSocket } from '../services/socket';
 import { createRoom, listRooms, type RoomSummary } from '../services/rooms';
 import { normalizeRoomId } from '../types';
+import { toast } from '../store/useToastStore';
 
 /** Avisos que chegam de outra rota via `location.state` (ver RoomPage). */
 const NOTICES: Record<string, string> = {
@@ -37,13 +38,14 @@ export default function HomePage() {
   const [creating, setCreating] = useState(false);
 
   const noticeKey = (location.state as { notice?: string } | null)?.notice;
-  const [notice, setNotice] = useState<string | null>(
-    noticeKey ? (NOTICES[noticeKey] ?? null) : null,
-  );
 
-  // Limpa o state da navegação para o F5 não ressuscitar o aviso.
+  // Mostra o aviso como toast e limpa o state da navegação para o F5 não
+  // ressuscitá-lo. O store deduplica, então o double-effect do StrictMode é inócuo.
   useEffect(() => {
-    if (noticeKey) navigate(location.pathname, { replace: true, state: null });
+    if (!noticeKey) return;
+    const message = NOTICES[noticeKey];
+    if (message) toast.info(message);
+    navigate(location.pathname, { replace: true, state: null });
   }, [noticeKey, location.pathname, navigate]);
 
   const refresh = useCallback(async () => {
@@ -107,7 +109,7 @@ export default function HomePage() {
       navigate(`/room/${room.id}`);
     } catch {
       setCreating(false);
-      setNotice('Não foi possível criar a sala. Tente de novo em instantes.');
+      toast.error('Não foi possível criar a sala. Tente de novo em instantes.');
     }
   };
 
@@ -179,15 +181,6 @@ export default function HomePage() {
       />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-6 py-10">
-        {notice && (
-          <div className="mb-6 flex items-start justify-between gap-3 p-3 bg-danger-soft border border-danger/30 rounded-lg text-xs text-danger animate-fade-in">
-            <span>{notice}</span>
-            <button onClick={() => setNotice(null)} title="Dispensar">
-              <X size={14} />
-            </button>
-          </div>
-        )}
-
         <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-text">

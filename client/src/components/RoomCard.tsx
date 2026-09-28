@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Crown, Link2, MoreHorizontal, Star, Trash2, Check } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { deleteRoom, setFavorite, type RoomSummary } from '../services/rooms';
+import { toast } from '../store/useToastStore';
 
 interface RoomCardProps {
   room: RoomSummary;
@@ -42,9 +43,10 @@ export function RoomCard({ room, onChanged }: RoomCardProps) {
     try {
       await navigator.clipboard.writeText(`${window.location.origin}/room/${room.id}`);
       setCopied(true);
+      toast.success('Link copiado');
       timers.current.push(window.setTimeout(() => setCopied(false), 1500));
     } catch {
-      // Clipboard bloqueado (contexto inseguro): sem feedback é melhor que um erro.
+      toast.error('Não foi possível copiar o link.');
     }
   };
 
@@ -55,6 +57,9 @@ export function RoomCard({ room, onChanged }: RoomCardProps) {
       await setFavorite(room.id, !room.isFavorite);
       onChanged();
       setOpen(false);
+      toast.success(room.isFavorite ? 'Removida dos favoritos' : 'Sala favoritada');
+    } catch {
+      toast.error('Não foi possível atualizar os favoritos. Tente de novo.');
     } finally {
       setBusy(false);
     }
@@ -68,6 +73,9 @@ export function RoomCard({ room, onChanged }: RoomCardProps) {
       onChanged();
       setOpen(false);
       setConfirming(false);
+      toast.success(`Sala "${room.name}" excluída`);
+    } catch {
+      toast.error('Não foi possível excluir a sala. Tente de novo.');
     } finally {
       setBusy(false);
     }
