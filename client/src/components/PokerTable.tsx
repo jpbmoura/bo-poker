@@ -337,7 +337,7 @@ export function PokerTable({
       {/* Spectators row */}
       {spectators.length > 0 && (
         <div className="mt-10 flex items-center gap-2 animate-fade-in">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-subtle">
+          <span className="text-[11px] uppercase tracking-[0.18em] text-subtle">
             Assistindo
           </span>
           <div className="flex flex-wrap gap-1.5 justify-center">

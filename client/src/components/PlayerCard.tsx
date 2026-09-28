@@ -117,7 +117,7 @@ function PlayerCardInner({
               className="absolute left-1/2 top-6 -translate-x-1/2 w-28 h-28 rounded-full pointer-events-none z-0"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0) 70%)',
+                  'radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgb(var(--highlight) / 0.7) 30%, rgb(var(--highlight) / 0) 70%)',
                 willChange: 'transform, opacity',
               }}
               initial={{ opacity: 0, scale: 0.3 }}
@@ -335,7 +335,7 @@ function PlayerCardInner({
                   />
                 </motion.span>
                 {isOutlier && (
-                  <span className="absolute -top-2 -right-1 text-[9px] uppercase tracking-wider font-mono font-semibold text-highlight bg-bg/80 px-1.5 py-0.5 rounded">
+                  <span className="absolute -top-2 -right-1 text-[10px] uppercase tracking-wider font-mono font-semibold text-highlight bg-bg/80 px-1.5 py-0.5 rounded">
                     Outlier
                   </span>
                 )}
@@ -343,7 +343,7 @@ function PlayerCardInner({
                     `round:result`: o cliente nunca recalcula o XP. */}
                 {showRevealed && gainedXp !== undefined && gainedXp > 0 && (
                   <motion.span
-                    className="absolute -top-2 left-1 text-[10px] font-mono font-semibold text-success"
+                    className="absolute -top-2 left-1 text-[11px] font-mono font-semibold text-success"
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: [0, 1, 1, 0], y: [6, -2, -6, -14] }}
                     transition={{
@@ -376,14 +376,14 @@ function PlayerCardInner({
             {player.name}
           </span>
         </div>
-        {offline && <span className="text-[10px] text-subtle">offline</span>}
+        {offline && <span className="text-[11px] text-subtle">offline</span>}
         {/* Progresso, no registro discreto que o resto da mesa usa. */}
         {player.progress && (
           <div className="w-[92px] mt-1">
             <XpBar progress={player.progress} />
             <div className="mt-1 flex items-center justify-center gap-1.5">
               <StagePips progress={player.progress} />
-              <span className="text-[9px] font-mono text-subtle">
+              <span className="text-[10px] font-mono text-subtle">
                 {player.progress.xp} XP
               </span>
             </div>

@@ -11,32 +11,32 @@
 @tailwind utilities;
 
 :root {
+  /* Tokens em canais RGB ("r g b") para o Tailwind aplicar opacidade
+     (bg-surface/40, border-danger/30...). Fora do Tailwind, use rgb(var(--x)). */
+
   /* Background layers — neutral zinc, dark but breathable */
-  --bg: #1A1A20;
-  --surface: #232329;
-  --surface-2: #2C2C33;
-  --surface-3: #353540;
-  --surface-4: #404048;
+  --bg: 26 26 32;          /* #1A1A20 */
+  --surface: 35 35 41;     /* #232329 */
+  --surface-2: 44 44 51;   /* #2C2C33 */
+  --surface-3: 53 53 64;   /* #353540 */
+  --surface-4: 64 64 72;   /* #404048 */
 
   /* Borders */
-  --border: #32323A;
-  --border-strong: #45454F;
+  --border: 50 50 58;        /* #32323A */
+  --border-strong: 69 69 79; /* #45454F */
 
-  /* Text */
-  --text: #FAFAFA;
-  --text-muted: #A1A1AA;
-  --text-subtle: #52525B;
+  /* Text — subtle clareado (#52525B -> #8E8E98) para passar contraste */
+  --text: 250 250 250;       /* #FAFAFA */
+  --text-muted: 161 161 170; /* #A1A1AA */
+  --text-subtle: 142 142 152;/* #8E8E98 */
 
   /* Semantic accents (used sparingly) */
-  --success: #10B981;
-  --success-soft: rgba(16, 185, 129, 0.12);
-  --danger: #F87171;
-  --danger-soft: rgba(248, 113, 113, 0.12);
-  --highlight: #F59E0B;
-  --highlight-soft: rgba(245, 158, 11, 0.14);
+  --success: 16 185 129;   /* #10B981 */
+  --danger: 248 113 113;   /* #F87171 */
+  --highlight: 245 158 11; /* #F59E0B */
 
   /* Pokeball red — kept only for the brand mark itself */
-  --brand: #EF4444;
+  --brand: 239 68 68;      /* #EF4444 */
 }
 
 * {
@@ -53,8 +53,8 @@ body {
   margin: 0;
   font-family: 'Inter', system-ui, sans-serif;
   font-feature-settings: 'cv11', 'ss03', 'ss01';
-  background-color: var(--bg);
-  color: var(--text);
+  background-color: rgb(var(--bg));
+  color: rgb(var(--text));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
@@ -64,58 +64,6 @@ body {
 .bg-dot-grid {
   background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
   background-size: 24px 24px;
-}
-
-/* 3D card flip primitives */
-.flip-scene {
-  perspective: 1000px;
-}
-
-.flip-card {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  transition: transform 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.flip-card.is-revealed {
-  transform: rotateY(180deg);
-}
-
-.flip-face {
-  position: absolute;
-  inset: 0;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.flip-face.back {
-  transform: rotateY(180deg);
-}
-
-/* Confetti — keyframes referenced by inline animation styles in Confetti.tsx */
-@keyframes confetti-fall {
-  0% {
-    transform: translate3d(0, -10vh, 0) rotate(var(--r0));
-    opacity: 0;
-  }
-  8% {
-    opacity: 1;
-  }
-  100% {
-    transform: translate3d(var(--drift), 110vh, 0) rotate(var(--r1));
-    opacity: 1;
-  }
-}
-
-@keyframes confetti-cleanup {
-  to {
-    display: none;
-  }
 }
 
 /* Press feedback for clickable cards/buttons */
@@ -140,16 +88,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg);
+  background: rgb(var(--bg));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--surface-3);
+  background: rgb(var(--surface-3));
   border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--surface-4);
+  background: rgb(var(--surface-4));
 }
 
 /* Focus ring helper */
@@ -157,6 +105,6 @@ body {
   outline: none;
 }
 .focus-ring:focus-visible {
-  outline: 2px solid var(--border-strong);
+  outline: 2px solid rgb(var(--highlight) / 0.8);
   outline-offset: 2px;
 }

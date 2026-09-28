@@ -98,7 +98,7 @@ export function SettingsDialog({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   maxLength={ROOM_NAME_MAX_LENGTH}
-                  className="flex-1 bg-surface-2 border border-border rounded-lg px-3.5 py-2.5 text-sm text-text placeholder:text-subtle outline-none focus:border-border-strong focus:bg-surface-3 transition-colors"
+                  className="flex-1 bg-surface-2 border border-border rounded-lg px-3.5 py-2.5 text-sm text-text placeholder:text-subtle outline-none focus:border-highlight/60 focus:ring-2 focus:ring-highlight/15 focus:bg-surface-3 transition-colors"
                 />
                 <Button type="submit" variant="secondary" disabled={!dirty || saving}>
                   {saving ? 'Salvando...' : 'Salvar'}
@@ -122,7 +122,7 @@ export function SettingsDialog({
 
         {isOwner && (
           <div className="mt-6 pt-5 border-t border-border">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-subtle mb-3">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-subtle mb-3">
               Zona de perigo
             </div>
             {confirming ? (

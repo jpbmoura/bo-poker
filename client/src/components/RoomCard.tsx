@@ -86,7 +86,7 @@ export function RoomCard({ room, onChanged }: RoomCardProps) {
           empilhamento, então o ⋯ continua clicável. */}
       <Link
         to={`/room/${room.id}`}
-        className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+        className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight/70"
         aria-label={`Entrar na sala ${room.name}`}
       />
 

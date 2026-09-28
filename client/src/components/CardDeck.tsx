@@ -47,7 +47,7 @@ export function CardDeck({ sequence, selected, disabled, onSelect }: CardDeckPro
         const isDimmed = selected !== null && !isSelected && !isPicking;
 
         const selectedShadow =
-          'shadow-[0_0_0_2px_var(--text),0_22px_50px_-12px_rgba(255,255,255,0.42)]';
+          'shadow-[0_0_0_2px_rgb(var(--text)),0_22px_50px_-12px_rgba(255,255,255,0.42)]';
 
         return (
           // A entrada escalonada mora AQUI, e nao no botao, porque `animate-*`
@@ -104,10 +104,10 @@ export function CardDeck({ sequence, selected, disabled, onSelect }: CardDeckPro
 
               {isSelected && !isPicking && (
                 <>
-                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] uppercase tracking-[0.18em] font-mono font-semibold text-text whitespace-nowrap animate-fade-in">
+                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.18em] font-mono font-semibold text-text whitespace-nowrap animate-fade-in">
                     Sua carta
                   </span>
-                  <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-text shadow-[0_0_10px_var(--text)]" />
+                  <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-text shadow-[0_0_10px_rgb(var(--text))]" />
                 </>
               )}
             </button>

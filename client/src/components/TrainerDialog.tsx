@@ -120,7 +120,7 @@ export function TrainerDialog({ open, onClose }: TrainerDialogProps) {
               aria-pressed={selected?.id === p.id}
             >
               <img src={p.form.sprite} alt="" className="w-12 h-12 object-contain" />
-              <span className="text-[10px] text-muted truncate max-w-full">{p.form.name}</span>
+              <span className="text-[11px] text-muted truncate max-w-full">{p.form.name}</span>
               {p.isActive && (
                 <span
                   className="absolute top-1 right-1 w-4 h-4 rounded-full bg-highlight text-bg flex items-center justify-center"

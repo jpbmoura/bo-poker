@@ -86,7 +86,7 @@ export function EntryDialog({
             setName(e.target.value);
           }}
           placeholder="Como aparecerá na mesa"
-          className="w-full bg-surface-2 border border-border rounded-lg px-3.5 py-2.5 text-sm text-text placeholder:text-subtle outline-none focus:border-border-strong focus:bg-surface-3 transition-colors mb-6"
+          className="w-full bg-surface-2 border border-border rounded-lg px-3.5 py-2.5 text-sm text-text placeholder:text-subtle outline-none focus:border-highlight/60 focus:ring-2 focus:ring-highlight/15 focus:bg-surface-3 transition-colors mb-6"
           maxLength={PLAYER_NAME_MAX_LENGTH}
           autoFocus
         />

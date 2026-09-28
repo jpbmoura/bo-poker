@@ -96,10 +96,10 @@ export function BranchChoiceDialog({ pokemon }: BranchChoiceDialogProps) {
                     picked === branch.id && 'scale-110',
                   )}
                 />
-                <span className="text-[10px] text-muted truncate max-w-full">{branch.name}</span>
+                <span className="text-[11px] text-muted truncate max-w-full">{branch.name}</span>
                 {/* Ramo com mais de uma forma: mostra onde ele termina. */}
                 {path.length > 1 && (
-                  <span className="text-[9px] text-subtle truncate max-w-full">
+                  <span className="text-[10px] text-subtle truncate max-w-full">
                     → {last.name}
                   </span>
                 )}

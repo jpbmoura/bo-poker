@@ -147,7 +147,7 @@ export default function HomePage() {
                   {session.user.name}
                 </div>
                 {session.user.login && (
-                  <div className="text-[10px] text-subtle font-mono truncate max-w-[160px]">
+                  <div className="text-[11px] text-subtle font-mono truncate max-w-[160px]">
                     @{session.user.login}
                   </div>
                 )}
@@ -206,7 +206,7 @@ export default function HomePage() {
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 placeholder="CÓDIGO"
                 aria-label="Código da sala"
-                className="w-[130px] bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-subtle outline-none focus:border-border-strong focus:bg-surface-3 transition-colors uppercase tracking-wider font-mono"
+                className="w-[130px] bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-subtle outline-none focus:border-highlight/60 focus:ring-2 focus:ring-highlight/15 focus:bg-surface-3 transition-colors uppercase tracking-wider font-mono"
                 maxLength={20}
               />
               <Button

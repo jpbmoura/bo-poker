@@ -53,7 +53,7 @@ export function TopActions({ me, onSignOut }: TopActionsProps) {
               aria-hidden
               className="absolute -inset-[3px] rounded-full"
               style={{
-                background: `conic-gradient(var(--brand) ${fraction * 360}deg, transparent 0deg)`,
+                background: `conic-gradient(rgb(var(--brand)) ${fraction * 360}deg, transparent 0deg)`,
                 mask: 'radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))',
                 WebkitMask:
                   'radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))',
@@ -73,7 +73,7 @@ export function TopActions({ me, onSignOut }: TopActionsProps) {
 
         {open && me && (
           <div className="absolute right-0 top-16 min-w-[230px] bg-surface border border-border rounded-xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.6)] p-4 animate-fade-up">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-subtle mb-1.5">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-subtle mb-1.5">
               Você
             </div>
             <div className="text-sm text-text font-medium truncate">{me.name}</div>
