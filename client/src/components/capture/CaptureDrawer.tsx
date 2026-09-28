@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Clock, X } from 'lucide-react';
+import { useReducedMotion } from 'framer-motion';
 import { Drawer } from '../ui/Drawer';
 import { Button } from '../ui/Button';
 import { Confetti } from '../Confetti';
@@ -26,13 +27,6 @@ const ERRORS: Record<string, string> = {
   DAY_CHANGED: 'O dia virou! Um novo Pokémon apareceu.',
   DB_UNAVAILABLE: 'O servidor não respondeu. Tente de novo em instantes.',
 };
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-  );
-}
 
 const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
 
@@ -68,7 +62,8 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
   const reload = useCaptureStore((s) => s.load);
   const applyTrainer = useTrainerStore((s) => s.apply);
 
-  const reduced = useMemo(prefersReducedMotion, []);
+  // Reativo: mudar a preferência do sistema com o app aberto vale na hora.
+  const reduced = useReducedMotion() ?? false;
   const [phase, setPhase] = useState<ScenePhase>('idle');
   const [wobbles, setWobbles] = useState(0);
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
@@ -179,6 +174,7 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
             disabled={busy}
             className="text-subtle hover:text-text transition-colors disabled:opacity-40"
             title="Fechar"
+            aria-label="Fechar"
           >
             <X size={16} />
           </button>
@@ -270,7 +266,7 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
                 disabled={!canThrow}
               >
                 <CaptureBall size={18} />
-                {busy ? 'Lançando...' : 'Lançar Pokébola'}
+                {busy ? 'Lançando…' : 'Lançar Pokébola'}
               </Button>
             )}
 

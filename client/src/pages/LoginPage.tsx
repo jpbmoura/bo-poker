@@ -48,7 +48,7 @@ export default function LoginPage() {
       });
     } catch {
       setSigningIn(false);
-      setError('Não foi possível iniciar o login. Tente novamente.');
+      setError('Não foi possível iniciar o login. Tente de novo.');
     }
   };
 
@@ -68,15 +68,15 @@ export default function LoginPage() {
             Entrar
           </h2>
           <p className="text-sm text-muted">
-            O login identifica você na mesa — é o que garante um assento por
-            pessoa, mesmo depois de recarregar a página.
+            Use sua conta do GitHub para entrar. Assim você mantém seu lugar na
+            mesa mesmo se recarregar a página.
           </p>
         </div>
 
         {isPending ? (
           <div className="flex items-center justify-center gap-2 py-3 text-subtle">
             <PokeballIcon spinning size={14} className="text-subtle" />
-            <span className="text-xs">Verificando sessão...</span>
+            <span className="text-xs">Verificando sessão…</span>
           </div>
         ) : (
           <Button
@@ -87,7 +87,7 @@ export default function LoginPage() {
             disabled={signingIn}
           >
             <GithubIcon size={16} />
-            {signingIn ? 'Redirecionando...' : 'Entrar com GitHub'}
+            {signingIn ? 'Redirecionando…' : 'Entrar com GitHub'}
           </Button>
         )}
 

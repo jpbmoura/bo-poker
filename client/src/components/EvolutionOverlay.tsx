@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useRoomStore } from '../store/useRoomStore';
 import type { EvolutionEvent } from '../types';
 
@@ -17,13 +17,6 @@ const REDUCED_TOTAL = 900;
 const PRELOAD_TIMEOUT = 600;
 
 type Phase = 'strobe' | 'flash' | 'settled' | 'out';
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-  );
-}
 
 /** Resolve quando a imagem carrega, falha, ou o timeout estoura — nunca pendura. */
 function preload(src: string): Promise<void> {
@@ -47,7 +40,8 @@ function preload(src: string): Promise<void> {
  * último e some por conta própria, sem `AnimatePresence`.
  */
 function EvolutionScene({ event, onDone }: { event: EvolutionEvent; onDone: () => void }) {
-  const reduced = useMemo(prefersReducedMotion, []);
+  // Reativo: mudar a preferência do sistema com o app aberto vale na hora.
+  const reduced = useReducedMotion() ?? false;
   const [phase, setPhase] = useState<Phase>(reduced ? 'settled' : 'strobe');
 
   useEffect(() => {

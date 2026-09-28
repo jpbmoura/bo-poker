@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getDailyCapture, type DailyCapture } from '../services/capture';
+import { toast } from './useToastStore';
 
 interface CaptureStoreState {
   capture: DailyCapture | null;
@@ -19,7 +20,10 @@ export const useCaptureStore = create<CaptureStoreState>((set) => ({
     if (inFlight) return inFlight;
     inFlight = getDailyCapture()
       .then((capture) => set({ capture, failed: false }))
-      .catch(() => set({ failed: true }))
+      .catch(() => {
+        set({ failed: true });
+        toast.error('A captura do dia não carregou. Tente de novo mais tarde.');
+      })
       .finally(() => {
         inFlight = null;
       });

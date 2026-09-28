@@ -12,15 +12,23 @@ import { TopActions } from '../components/TopActions';
 import { SettingsDialog } from '../components/SettingsDialog';
 import { EvolutionOverlay } from '../components/EvolutionOverlay';
 import { BranchChoiceDialog } from '../components/BranchChoiceDialog';
+import { Copy, Eye } from 'lucide-react';
+import { RoundControl } from '../components/RoundControl';
+import { FullScreenLoader } from '../components/ui/FullScreenLoader';
 import { PokeballIcon } from '../components/ui/PokeballIcon';
 import { Button } from '../components/ui/Button';
-import { cn } from '../utils/cn';
 import { computeStats, someoneVoted as anyoneVoted } from '../utils/stats';
-import { clearSession, readSession } from '../services/session';
+import {
+  clearSession,
+  readSession,
+  writePreferredRole,
+  writeSession,
+} from '../services/session';
 import { signOut, useSession } from '../services/auth';
 import { useTrainer } from '../hooks/useTrainer';
 import { disconnectSocket } from '../services/socket';
 import { normalizeRoomId } from '../types';
+import { toast } from '../store/useToastStore';
 import {
   deleteRoom,
   getRoom,
@@ -46,7 +54,7 @@ export default function RoomPage() {
 
   // Sem canonicalizar, /room/abc e /room/ABC eram salas diferentes.
   const roomId = normalizeRoomId(rawRoomId) ?? '';
-  const { join, leave, castVote, reveal, reset, clearInactive } = useRoom(roomId);
+  const { join, leave, castVote, reveal, reset, clearInactive, setRole } = useRoom(roomId);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   // O prefetch REST existe para UX: você descobre que a sala nao existe ANTES
@@ -67,6 +75,8 @@ export default function RoomPage() {
   const roundResult = useRoomStore((s) => s.roundResult);
   const setCeremonyBusy = useRoomStore((s) => s.setCeremonyBusy);
   const setEntryData = useRoomStore((s) => s.setEntryData);
+  const setMyRole = useRoomStore((s) => s.setRole);
+  const myName = useRoomStore((s) => s.myName);
   const resetStore = useRoomStore((s) => s.reset);
 
   useEffect(() => {
@@ -134,6 +144,17 @@ export default function RoomPage() {
     navigate('/', { replace: true, state: { notice: 'ROOM_DELETED' } });
   }, [closed, userId, roomId, resetStore, navigate]);
 
+  // Depois do join o EntryDialog some, então erros do servidor (ex.: "Você não
+  // está mais na sala") só apareceriam no store. Mostra como toast.
+  useEffect(() => {
+    if (joined && error && error.code !== 'ROOM_NOT_FOUND') toast.error(error.message);
+  }, [joined, error]);
+
+  const handleClearInactive = () => {
+    clearInactive();
+    toast.success('Jogadores inativos removidos da mesa');
+  };
+
   const handleEntry = (data: { name: string; role: PlayerRole }) => {
     setEntryData(data);
     join(data.name, data.role);
@@ -161,8 +182,10 @@ export default function RoomPage() {
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
+      toast.success('Link copiado. Mande para o time.');
       return true;
     } catch {
+      toast.error('Não foi possível copiar o link.');
       return false;
     }
   };
@@ -176,6 +199,7 @@ export default function RoomPage() {
       await setFavorite(roomId, next);
     } catch {
       setIsFavorite(!next);
+      toast.error('Não foi possível atualizar os favoritos. Tente de novo.');
     }
   };
 
@@ -221,7 +245,29 @@ export default function RoomPage() {
   // -- a carta destacada e sempre a que o servidor registrou de fato.
   const myVote = (myPlayer?.vote ?? null) as CardValue | null;
 
-  const deckDisabled = !joined || revealed;
+  // O papel verdadeiro é o que o servidor devolve no estado: o re-join ignora o
+  // `role` do payload (Room.ts), então o store local pode estar defasado.
+  const myRole: PlayerRole = myPlayer?.role ?? 'voter';
+  const isSpectator = myRole === 'spectator';
+
+  const handleToggleRole = () => {
+    if (revealed) return;
+    const next: PlayerRole = isSpectator ? 'voter' : 'spectator';
+    const hadVote = myPlayer?.vote != null;
+    setRole(next);
+    setMyRole(next);
+    writePreferredRole(next);
+    if (userId && myName) writeSession(userId, roomId, { name: myName, role: next });
+    toast.info(
+      next === 'spectator'
+        ? hadVote
+          ? 'Você está só assistindo. Seu voto desta rodada foi descartado.'
+          : 'Você está só assistindo.'
+        : 'Você voltou a votar.',
+    );
+  };
+
+  const deckDisabled = !joined || revealed || isSpectator;
 
   const canReveal = !revealed && anyoneVoted(players);
 
@@ -240,7 +286,7 @@ export default function RoomPage() {
         </h1>
         <p className="text-sm text-muted text-center max-w-xs mb-1">
           O código <span className="font-mono text-text">{roomId}</span> não existe
-          ou a sala foi encerrada pelo dono.
+          ou a sala foi excluída pelo dono. Confira o link com quem te convidou.
         </p>
         <Button variant="secondary" className="mt-6" onClick={() => navigate('/')}>
           Voltar ao início
@@ -250,11 +296,7 @@ export default function RoomPage() {
   }
 
   if (metaState === 'loading' && !joined) {
-    return (
-      <div className="min-h-screen bg-dot-grid flex items-center justify-center">
-        <PokeballIcon spinning size={28} className="text-muted/60" />
-      </div>
-    );
+    return <FullScreenLoader label="Abrindo a sala…" />;
   }
 
   if (!joined) {
@@ -278,61 +320,50 @@ export default function RoomPage() {
       <IconSidebar
         onCopyLink={handleCopyLink}
         onOpenSettings={() => setSettingsOpen(true)}
-        onClearInactive={clearInactive}
+        onClearInactive={handleClearInactive}
         onLeave={handleLeave}
         onHome={() => navigate('/')}
         onToggleFavorite={handleToggleFavorite}
+        onToggleRole={handleToggleRole}
         hasInactive={hasInactive}
         isFavorite={isFavorite}
+        role={myRole}
+        roleLocked={revealed}
       />
 
-      <TopActions me={myPlayer} onSignOut={handleSignOut} />
-
-      {roomState && (
-        <div className="fixed top-6 left-14 right-0 z-20 flex justify-center pointer-events-none">
-          <div className="pointer-events-auto animate-fade-up flex flex-col items-center gap-2">
-            {!revealed ? (
-              <>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={reveal}
-                  disabled={!canReveal}
-                  className={cn(
-                    'min-w-[160px] press-down',
-                    canReveal && 'animate-pulse-glow',
-                  )}
-                >
-                  Revelar
-                </Button>
-                {stats.votingPlayers > 0 && (
-                  <span
-                    className={cn(
-                      'text-[11px] font-mono px-2.5 py-1 rounded-full border transition-colors',
-                      canReveal
-                        ? 'text-text border-border-strong bg-surface-2/80 backdrop-blur'
-                        : 'text-subtle border-border bg-surface-2/50',
-                    )}
-                  >
-                    {stats.votedCount === 0
-                      ? 'Aguardando votos...'
-                      : `${stats.votedCount}/${stats.votingPlayers} votaram`}
-                  </span>
-                )}
-              </>
-            ) : (
-              <Button
-                variant="solid"
-                size="lg"
-                onClick={reset}
-                className="min-w-[160px] press-down"
-              >
-                Nova rodada
-              </Button>
-            )}
+      {/* Barra superior: identidade da sala | controle da rodada | conta.
+          Grid 1fr-auto-1fr mantém o botão centrado sem sobrepor nada. */}
+      <header className="fixed top-0 left-14 right-0 z-20 h-20 px-4 sm:px-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4 animate-fade-in">
+        <div className="min-w-0 hidden sm:block">
+          <div className="text-sm font-medium text-text truncate">
+            {roomState?.name ?? prefetchedName ?? 'Sala'}
           </div>
+          <button
+            onClick={handleCopyLink}
+            className="group mt-0.5 inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-subtle hover:text-text transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight/70"
+            title="Copiar link da sala"
+          >
+            {roomId}
+            <Copy size={11} className="opacity-60 group-hover:opacity-100 transition-opacity" />
+          </button>
         </div>
-      )}
+
+        <div className="col-start-2">
+          {roomState && (
+            <RoundControl
+              players={players}
+              revealed={revealed}
+              canReveal={canReveal}
+              onReveal={reveal}
+              onReset={reset}
+            />
+          )}
+        </div>
+
+        <div className="col-start-3 flex justify-end">
+          <TopActions me={myPlayer} onSignOut={handleSignOut} />
+        </div>
+      </header>
 
       {/* Acima do Confetti (z-40) e do Dialog (z-50): ver EvolutionOverlay. */}
       <EvolutionOverlay />
@@ -345,26 +376,34 @@ export default function RoomPage() {
         roomId={roomId}
         roomName={roomState?.name ?? roomId}
         playerCount={players.length}
+        sequence={sequence}
         isOwner={roomState?.isOwner ?? false}
         onRename={handleRename}
         onDelete={handleDelete}
       />
 
       {!connected && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 bg-danger-soft border border-danger/30 text-danger text-xs rounded-full backdrop-blur animate-fade-in">
-          Reconectando ao servidor...
+        <div
+          role="status"
+          className="fixed top-20 left-14 right-0 z-30 flex justify-center pointer-events-none animate-fade-in"
+        >
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-danger-soft border border-danger/30 text-danger text-xs rounded-full backdrop-blur">
+            <PokeballIcon spinning size={11} />
+            Conexão perdida. Reconectando…
+          </div>
         </div>
       )}
 
-      <main className="pl-14 min-h-screen flex flex-col">
+      <main className="pl-14 pt-20 min-h-screen flex flex-col">
         {!roomState ? (
-          <div className="flex-1 flex items-center justify-center text-muted">
+          <div className="flex-1 flex flex-col items-center justify-center gap-3">
             <PokeballIcon spinning size={28} className="text-muted/60" />
+            <span className="text-xs text-subtle">Abrindo a mesa…</span>
           </div>
         ) : (
           <>
             {/* Center area */}
-            <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 gap-12">
+            <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 gap-10">
               <PokerTable
                 players={players}
                 revealed={revealed}
@@ -373,25 +412,38 @@ export default function RoomPage() {
                 outlierIds={stats.outlierIds}
                 gainByPlayerId={gainByPlayerId}
                 onCeremonyBusyChange={setCeremonyBusy}
+                onCopyLink={handleCopyLink}
               />
 
               <StatsPanel stats={stats} visible={revealed} />
             </div>
 
             {/* Bottom deck */}
-            <div className="pb-8 pt-4">
-              <CardDeck
-                sequence={sequence}
-                selected={myVote}
-                disabled={deckDisabled}
-                onSelect={castVote}
-              />
-              <div className="mt-4 flex justify-center">
-                <span className="px-3 py-1 text-[11px] font-mono text-subtle border border-border rounded-full">
-                  {roomState?.name ?? 'Sala'} ·{' '}
-                  <span className="text-muted">{roomId}</span>
-                </span>
-              </div>
+            <div className="pb-10 pt-4">
+              {isSpectator ? (
+                <div className="flex justify-center animate-fade-up">
+                  <div className="flex items-center gap-3 pl-4 pr-1.5 py-1.5 rounded-full bg-surface-2/80 border border-border text-sm text-muted">
+                    <Eye size={15} className="text-subtle" />
+                    Você está só assistindo
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={handleToggleRole}
+                      disabled={revealed}
+                    >
+                      Entrar na votação
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <CardDeck
+                  sequence={sequence}
+                  selected={myVote}
+                  disabled={deckDisabled}
+                  onSelect={castVote}
+                />
+              )}
             </div>
           </>
         )}

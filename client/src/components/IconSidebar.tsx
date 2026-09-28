@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link2, Settings, LogOut, Check, Eraser, Star } from 'lucide-react';
+import { Link2, Settings, LogOut, Check, Eraser, Star, Eye, Hand } from 'lucide-react';
+import type { PlayerRole } from '../types';
 import { cn } from '../utils/cn';
 import { PokeballIcon } from './ui/PokeballIcon';
 
@@ -10,8 +11,12 @@ interface IconSidebarProps {
   onLeave: () => void;
   onHome: () => void;
   onToggleFavorite: () => void;
+  onToggleRole: () => void;
   hasInactive: boolean;
   isFavorite: boolean;
+  role: PlayerRole;
+  /** O servidor recusa troca de papel com as cartas abertas. */
+  roleLocked: boolean;
 }
 
 export function IconSidebar({
@@ -21,11 +26,16 @@ export function IconSidebar({
   onLeave,
   onHome,
   onToggleFavorite,
+  onToggleRole,
   hasInactive,
   isFavorite,
+  role,
+  roleLocked,
 }: IconSidebarProps) {
   const [copied, setCopied] = useState(false);
   const [cleared, setCleared] = useState(false);
+  // Sair da sala é destrutivo (libera o assento): pede um segundo clique.
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   // Ambos os timers vazavam: setState depois do unmount se a pessoa saisse da
   // sala dentro dos 1,5s do feedback.
@@ -46,6 +56,15 @@ export function IconSidebar({
     }
   };
 
+  const handleLeave = () => {
+    if (confirmLeave) {
+      onLeave();
+      return;
+    }
+    setConfirmLeave(true);
+    timers.current.push(window.setTimeout(() => setConfirmLeave(false), 3000));
+  };
+
   const handleClear = () => {
     if (!hasInactive) return;
     onClearInactive();
@@ -59,6 +78,7 @@ export function IconSidebar({
         onClick={onHome}
         className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:text-text hover:bg-surface-2 transition-all active:scale-90"
         title="Início"
+        aria-label="Voltar ao início"
       >
         <PokeballIcon size={18} className="text-brand" />
       </button>
@@ -104,15 +124,45 @@ export function IconSidebar({
         )}
       </SidebarButton>
 
+      {/* O ícone mostra o papel ATUAL; o título diz o que o clique faz. */}
+      <SidebarButton
+        onClick={onToggleRole}
+        disabled={roleLocked}
+        title={
+          roleLocked
+            ? 'Troque de papel na próxima rodada'
+            : role === 'spectator'
+              ? 'Voltar a votar'
+              : 'Só assistir'
+        }
+      >
+        {role === 'spectator' ? <Eye size={16} /> : <Hand size={16} />}
+      </SidebarButton>
+
       <SidebarButton onClick={onOpenSettings} title="Configurações">
         <Settings size={16} />
       </SidebarButton>
 
       <div className="flex-1" />
 
-      <SidebarButton onClick={onLeave} title="Sair da sala" danger>
-        <LogOut size={16} />
-      </SidebarButton>
+      <div className="relative">
+        <SidebarButton
+          onClick={handleLeave}
+          title={confirmLeave ? 'Clique de novo para sair' : 'Sair da sala'}
+          danger
+          armed={confirmLeave}
+        >
+          <LogOut size={16} />
+        </SidebarButton>
+        {confirmLeave && (
+          <span
+            role="status"
+            className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2.5 py-1.5 rounded-lg bg-surface-2 border border-danger/30 text-xs text-danger whitespace-nowrap shadow-lg animate-fade-in pointer-events-none"
+          >
+            Clique de novo para sair
+          </span>
+        )}
+      </div>
     </aside>
   );
 }
@@ -123,27 +173,31 @@ function SidebarButton({
   title,
   danger,
   disabled,
+  armed,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   title: string;
   danger?: boolean;
   disabled?: boolean;
+  armed?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={title}
       className={cn(
         'w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 mb-1',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight/70',
         !disabled && 'active:scale-90',
         disabled && 'opacity-30 cursor-not-allowed',
         !disabled && (danger
           ? 'text-muted hover:bg-danger-soft hover:text-danger'
           : 'text-muted hover:bg-surface-2 hover:text-text'),
         disabled && 'text-subtle',
+        armed && 'bg-danger-soft text-danger',
       )}
     >
       {children}

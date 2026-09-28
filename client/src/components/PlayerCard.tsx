@@ -5,6 +5,7 @@ import type { SerializedPlayer } from '../types';
 import { PokeballIcon } from './ui/PokeballIcon';
 import { CountUpValue } from './CountUpValue';
 import { StagePips, XpBar } from './TrainerProgressBits';
+import { REVEAL } from '../lib/motion';
 
 interface PlayerCardProps {
   player: SerializedPlayer;
@@ -23,8 +24,8 @@ interface PlayerCardProps {
   gainedXp?: number;
 }
 
-const FLIP_DURATION_S = 0.7;
-const EMERGE_DURATION_S = 0.7;
+const FLIP_DURATION_S = REVEAL.flipMs / 1000;
+const EMERGE_DURATION_S = 0.6;
 // Pokemon emerges when card hits 90° (edge-on, mid-flip)
 const EMERGE_OFFSET_S = FLIP_DURATION_S * 0.5;
 
@@ -117,7 +118,7 @@ function PlayerCardInner({
               className="absolute left-1/2 top-6 -translate-x-1/2 w-28 h-28 rounded-full pointer-events-none z-0"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0) 70%)',
+                  'radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgb(var(--highlight) / 0.7) 30%, rgb(var(--highlight) / 0) 70%)',
                 willChange: 'transform, opacity',
               }}
               initial={{ opacity: 0, scale: 0.3 }}
@@ -276,9 +277,9 @@ function PlayerCardInner({
                 >
                   {isWaiting ? (
                     <span className="flex items-center gap-1 text-muted">
-                      <span className="w-1.5 h-1.5 rounded-full bg-muted animate-pulse [animation-delay:0ms]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-muted animate-pulse [animation-delay:180ms]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-muted animate-pulse [animation-delay:360ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted motion-safe:animate-pulse [animation-delay:0ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted motion-safe:animate-pulse [animation-delay:180ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted motion-safe:animate-pulse [animation-delay:360ms]" />
                     </span>
                   ) : sprite ? (
                     <img
@@ -307,7 +308,8 @@ function PlayerCardInner({
                   'relative w-full h-full rounded-xl border bg-surface-2 flex items-center justify-center shadow-sm overflow-hidden',
                   isSelf ? 'border-border-strong' : 'border-border',
                   glowing && 'animate-glow-once',
-                  isOutlier && 'animate-outlier-ring border-highlight/70',
+                  isOutlier &&
+                    'motion-safe:animate-outlier-ring motion-reduce:shadow-[0_0_0_2px_rgb(var(--highlight)/0.8)] border-highlight/70',
                 )}
               >
                 <motion.span
@@ -335,15 +337,15 @@ function PlayerCardInner({
                   />
                 </motion.span>
                 {isOutlier && (
-                  <span className="absolute -top-2 -right-1 text-[9px] uppercase tracking-wider font-mono font-semibold text-highlight bg-bg/80 px-1.5 py-0.5 rounded">
-                    Outlier
+                  <span className="absolute -top-2 -right-1 text-[10px] uppercase tracking-wider font-mono font-semibold text-highlight bg-bg/80 px-1.5 py-0.5 rounded">
+                    Fora da curva
                   </span>
                 )}
                 {/* Sobe e some depois do numero assentar. O valor vem do
                     `round:result`: o cliente nunca recalcula o XP. */}
                 {showRevealed && gainedXp !== undefined && gainedXp > 0 && (
                   <motion.span
-                    className="absolute -top-2 left-1 text-[10px] font-mono font-semibold text-success"
+                    className="absolute -top-2 left-1 text-[11px] font-mono font-semibold text-success"
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: [0, 1, 1, 0], y: [6, -2, -6, -14] }}
                     transition={{
@@ -376,14 +378,14 @@ function PlayerCardInner({
             {player.name}
           </span>
         </div>
-        {offline && <span className="text-[10px] text-subtle">offline</span>}
+        {offline && <span className="text-[11px] text-subtle">offline</span>}
         {/* Progresso, no registro discreto que o resto da mesa usa. */}
         {player.progress && (
           <div className="w-[92px] mt-1">
             <XpBar progress={player.progress} />
             <div className="mt-1 flex items-center justify-center gap-1.5">
               <StagePips progress={player.progress} />
-              <span className="text-[9px] font-mono text-subtle">
+              <span className="text-[10px] font-mono text-subtle">
                 {player.progress.xp} XP
               </span>
             </div>

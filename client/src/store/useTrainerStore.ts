@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getTrainer, type TrainerCollection, type TrainerPokemon } from '../services/trainer';
+import { toast } from './useToastStore';
 
 /**
  * `unavailable` é diferente de "coleção vazia": vazia significa "escolha um
@@ -38,6 +39,7 @@ export const useTrainerStore = create<TrainerStoreState>((set, get) => ({
       .catch(() => {
         // Não distingue 401 aqui: sem sessão o RequireAuth já redirecionou.
         set({ status: 'unavailable' });
+        toast.error('Não foi possível carregar seus Pokémon agora. Recarregue a página em instantes.');
       })
       .finally(() => {
         inFlight = null;

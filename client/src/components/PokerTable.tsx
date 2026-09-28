@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
-import { Sparkles, Zap, ThumbsUp } from 'lucide-react';
+import { Sparkles, Zap, ThumbsUp, Link2 } from 'lucide-react';
 import { PlayerCard } from './PlayerCard';
 import { Confetti } from './Confetti';
 import { PokeballIcon } from './ui/PokeballIcon';
 import { cn } from '../utils/cn';
 import { eligibleVoters } from '../utils/stats';
+import { REVEAL } from '../lib/motion';
 import type { SerializedPlayer } from '../types';
 
 interface PokerTableProps {
@@ -22,20 +23,21 @@ interface PokerTableProps {
    * dessincronizar na primeira mudança aqui.
    */
   onCeremonyBusyChange?: (busy: boolean) => void;
+  /** Atalho no estado vazio: mesa sem ninguém votando pede convite. */
+  onCopyLink?: () => void;
 }
 
-const PREP_MS = 380;
-const FLIP_BASE_MS = 700;
-const WAVE_STEP_MS = 120;
+const PREP_MS = REVEAL.prepMs;
+const FLIP_BASE_MS = REVEAL.flipMs;
 /**
  * Quando a mesa é considerada livre depois do reveal.
  *
- * +1400 e não o cleanup completo do consenso (+3600): em +1200 o shake, o glow
+ * +1200 e não o cleanup completo do consenso (+3000): em +1000 o shake, o glow
  * e o burst de comemoração já acabaram e o banner assentou. O rabo do confete
  * segue correndo POR BAIXO do overlay, o que lê como "comemoração -> evolução".
  * Esperar os 3600 daria ~4 s de nada antes da primeira de até três evoluções.
  */
-const CEREMONY_END_OFFSET_MS = 1400;
+const CEREMONY_END_OFFSET_MS = 1200;
 
 type Verdict = 'consensus' | 'outliers' | 'near' | null;
 
@@ -70,9 +72,10 @@ function computeVerdict(
 
 interface VerdictBannerProps {
   verdict: Exclude<Verdict, null>;
+  onDismiss: () => void;
 }
 
-function VerdictBanner({ verdict }: VerdictBannerProps) {
+function VerdictBanner({ verdict, onDismiss }: VerdictBannerProps) {
   const config = {
     consensus: {
       Icon: Sparkles,
@@ -82,14 +85,14 @@ function VerdictBanner({ verdict }: VerdictBannerProps) {
     },
     outliers: {
       Icon: Zap,
-      text: 'Eficácia variável',
+      text: 'Opiniões divididas',
       classes: 'text-highlight drop-shadow-[0_2px_12px_rgba(245,158,11,0.4)]',
       scale: 0.95,
     },
     near: {
       Icon: ThumbsUp,
-      text: 'Boa convergência',
-      classes: 'text-success drop-shadow-[0_2px_10px_rgba(34,197,94,0.35)]',
+      text: 'Quase lá',
+      classes: 'text-success drop-shadow-[0_2px_10px_rgb(var(--success)/0.35)]',
       scale: 0.9,
     },
   }[verdict];
@@ -102,9 +105,12 @@ function VerdictBanner({ verdict }: VerdictBannerProps) {
       initial={{ opacity: 0, y: 12, scale: 0.6 }}
       animate={{ opacity: 1, y: 0, scale: config.scale }}
       exit={{ opacity: 0, y: -8, scale: 0.85 }}
-      transition={{ type: 'spring', stiffness: 220, damping: 14 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+      onClick={onDismiss}
+      role="status"
+      title="Clique para fechar"
       className={cn(
-        'absolute left-1/2 -translate-x-1/2 -top-14 whitespace-nowrap flex items-center gap-2 pointer-events-none',
+        'absolute left-1/2 -translate-x-1/2 -top-14 whitespace-nowrap flex items-center gap-2 cursor-pointer select-none',
         config.classes,
       )}
     >
@@ -122,6 +128,7 @@ export function PokerTable({
   outlierIds,
   gainByPlayerId,
   onCeremonyBusyChange,
+  onCopyLink,
 }: PokerTableProps) {
   const [charging, setCharging] = useState(false);
   const [flipReady, setFlipReady] = useState(false);
@@ -227,10 +234,12 @@ export function PokerTable({
 
     const voterCount = snapVoters.length;
     const center = (voterCount - 1) / 2;
+    // Mesa grande não pode esticar a espera: o passo encolhe para caber no teto.
+    const waveStep = center > 0 ? Math.min(REVEAL.waveStepMs, REVEAL.waveMaxMs / center) : 0;
     const delays: Record<string, number> = {};
     let maxDelay = 0;
     snapVoters.forEach((p, i) => {
-      const d = Math.abs(i - center) * WAVE_STEP_MS;
+      const d = Math.round(Math.abs(i - center) * waveStep);
       delays[p.id] = d;
       if (d > maxDelay) maxDelay = d;
     });
@@ -255,8 +264,8 @@ export function PokerTable({
     }, PREP_MS));
     // So a ORDEM muda no passo de ordenacao; `delayById` fica intacto, entao a
     // prop flipDelayMs de cada card nao muda e nada reinicia.
-    timeouts.push(window.setTimeout(() => setOrderIds(sortedIds), flipEnd + 250));
-    timeouts.push(window.setTimeout(() => setVerdict(v), flipEnd + 200));
+    timeouts.push(window.setTimeout(() => setOrderIds(sortedIds), flipEnd + 150));
+    timeouts.push(window.setTimeout(() => setVerdict(v), flipEnd + 150));
 
     if (v === 'consensus') {
       timeouts.push(window.setTimeout(() => {
@@ -264,16 +273,16 @@ export function PokerTable({
         setGlowing(true);
         setCelebrating(true);
         setConfetti(true);
-      }, flipEnd + 300));
-      timeouts.push(window.setTimeout(() => setShaking(false), flipEnd + 900));
-      timeouts.push(window.setTimeout(() => setCelebrating(false), flipEnd + 1200));
-      timeouts.push(window.setTimeout(() => setConfetti(false), flipEnd + 3400));
-      timeouts.push(window.setTimeout(() => setGlowing(false), flipEnd + 3600));
-      timeouts.push(window.setTimeout(() => setVerdict(null), flipEnd + 3000));
+      }, flipEnd + 200));
+      timeouts.push(window.setTimeout(() => setShaking(false), flipEnd + 700));
+      timeouts.push(window.setTimeout(() => setCelebrating(false), flipEnd + 1000));
+      timeouts.push(window.setTimeout(() => setVerdict(null), flipEnd + 2400));
+      timeouts.push(window.setTimeout(() => setConfetti(false), flipEnd + 2800));
+      timeouts.push(window.setTimeout(() => setGlowing(false), flipEnd + 3000));
     } else if (v === 'outliers') {
-      timeouts.push(window.setTimeout(() => setVerdict(null), flipEnd + 3500));
+      timeouts.push(window.setTimeout(() => setVerdict(null), flipEnd + 2600));
     } else if (v === 'near') {
-      timeouts.push(window.setTimeout(() => setVerdict(null), flipEnd + 2800));
+      timeouts.push(window.setTimeout(() => setVerdict(null), flipEnd + 2200));
     }
 
     return () => timeouts.forEach((t) => window.clearTimeout(t));
@@ -289,7 +298,7 @@ export function PokerTable({
         className="pointer-events-none fixed inset-0 z-20"
         initial={{ opacity: 0 }}
         animate={{ opacity: charging ? 1 : 0 }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
         style={{
           background:
             'radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.35) 90%)',
@@ -298,12 +307,24 @@ export function PokerTable({
 
       <div className="relative w-full">
         <AnimatePresence>
-          {verdict && <VerdictBanner verdict={verdict} />}
+          {verdict && <VerdictBanner verdict={verdict} onDismiss={() => setVerdict(null)} />}
         </AnimatePresence>
 
         {voters.length === 0 ? (
-          <div className="text-center py-10 text-subtle text-sm animate-fade-in">
-            Esperando jogadores entrarem...
+          <div className="flex flex-col items-center text-center py-10 animate-fade-in">
+            <div className="text-sm text-text font-medium">Ninguém votando ainda</div>
+            <p className="mt-1 text-sm text-muted max-w-xs">
+              Mande o link para o time entrar na mesa.
+            </p>
+            {onCopyLink && (
+              <button
+                onClick={onCopyLink}
+                className="mt-4 inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm text-text bg-surface-2 border border-border-strong hover:bg-surface-3 transition-colors press-down focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight/70"
+              >
+                <Link2 size={14} />
+                Copiar link da sala
+              </button>
+            )}
           </div>
         ) : (
           <LayoutGroup>
@@ -337,7 +358,7 @@ export function PokerTable({
       {/* Spectators row */}
       {spectators.length > 0 && (
         <div className="mt-10 flex items-center gap-2 animate-fade-in">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-subtle">
+          <span className="text-[11px] uppercase tracking-[0.18em] text-subtle">
             Assistindo
           </span>
           <div className="flex flex-wrap gap-1.5 justify-center">
@@ -364,6 +385,7 @@ export function PokerTable({
                 </div>
                 <span className="text-[11px] text-muted truncate max-w-[100px]">
                   {s.name}
+                  {s.id === myPlayerId && <span className="text-subtle"> (você)</span>}
                 </span>
               </div>
             ))}

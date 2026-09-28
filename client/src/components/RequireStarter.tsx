@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { useTrainer } from '../hooks/useTrainer';
 import StarterPage from '../pages/StarterPage';
-import { PokeballIcon } from './ui/PokeballIcon';
+import { FullScreenLoader } from './ui/FullScreenLoader';
 
 /**
  * Portão de inicial. Fica DENTRO do `RequireAuth` para a sessão já ter
@@ -23,11 +23,7 @@ export function RequireStarter() {
   const { status, needsStarter } = useTrainer();
 
   if (status === 'idle' || status === 'loading') {
-    return (
-      <div className="min-h-screen bg-dot-grid flex items-center justify-center">
-        <PokeballIcon spinning size={28} className="text-muted/60" />
-      </div>
-    );
+    return <FullScreenLoader label="Carregando seus Pokémon…" />;
   }
 
   if (needsStarter) return <StarterPage />;

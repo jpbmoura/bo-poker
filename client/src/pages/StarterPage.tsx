@@ -113,7 +113,7 @@ export default function StarterPage({ title }: StarterPageProps) {
         <div className="grid gap-x-8 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
           {groups.map(([gen, lines]) => (
             <section key={gen}>
-              <h2 className="text-[10px] uppercase tracking-[0.18em] text-subtle mb-2.5">
+              <h2 className="text-[11px] uppercase tracking-[0.18em] text-subtle mb-2.5">
                 {GEN_LABEL[gen] ?? `Geração ${gen}`}
               </h2>
               <div className="grid grid-cols-3 gap-2.5">
@@ -161,13 +161,7 @@ export default function StarterPage({ title }: StarterPageProps) {
       </main>
 
       {/* Barra fixa: a linha completa do escolhido + confirmação. */}
-      {/*
-        `bg-surface` sem modificador de opacidade DE PROPÓSITO. Os tokens de cor
-        são `var(--...)` no tailwind.config, e o Tailwind 3 não consegue aplicar
-        `/opacidade` a eles — `bg-surface/95` compila para transparente. Aqui a
-        barra é fixa e o conteúdo rola por baixo, então precisa ser opaca.
-      */}
-      <div className="fixed bottom-0 inset-x-0 border-t border-border bg-surface">
+      <div className="fixed bottom-0 inset-x-0 border-t border-border bg-surface/95 backdrop-blur">
         <div className="max-w-5xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
           {selected ? (
             <motion.div
@@ -180,19 +174,19 @@ export default function StarterPage({ title }: StarterPageProps) {
               {selected.stages.map((form, i) => (
                 <div key={form.id} className="flex items-center gap-3">
                   {i > 0 && (
-                    <div className="text-[10px] font-mono text-subtle whitespace-nowrap">
+                    <div className="text-[11px] font-mono text-subtle whitespace-nowrap">
                       {XP_THRESHOLDS[i]} XP →
                     </div>
                   )}
                   <div className="flex flex-col items-center">
                     <img src={spriteUrl(form.id)} alt="" className="w-11 h-11 object-contain" />
-                    <span className="text-[10px] text-muted">{form.name}</span>
+                    <span className="text-[11px] text-muted">{form.name}</span>
                   </div>
                 </div>
               ))}
               {selected.branches && (
                 <div className="flex items-center gap-2 ml-1">
-                  <div className="text-[10px] font-mono text-subtle whitespace-nowrap">
+                  <div className="text-[11px] font-mono text-subtle whitespace-nowrap">
                     {XP_THRESHOLDS[1]} XP →
                   </div>
                   <div className="flex -space-x-2">
@@ -206,7 +200,7 @@ export default function StarterPage({ title }: StarterPageProps) {
                       />
                     ))}
                   </div>
-                  <span className="text-[10px] text-subtle">você escolhe</span>
+                  <span className="text-[11px] text-subtle">você escolhe</span>
                 </div>
               )}
             </motion.div>
@@ -230,7 +224,7 @@ export default function StarterPage({ title }: StarterPageProps) {
               disabled={!selected || saving}
             >
               {saving
-                ? 'Escolhendo...'
+                ? 'Escolhendo…'
                 : selected
                   ? `Começar com ${selected.stages[0].name}`
                   : 'Escolher'}

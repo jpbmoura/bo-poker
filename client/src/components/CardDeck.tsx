@@ -47,7 +47,7 @@ export function CardDeck({ sequence, selected, disabled, onSelect }: CardDeckPro
         const isDimmed = selected !== null && !isSelected && !isPicking;
 
         const selectedShadow =
-          'shadow-[0_0_0_2px_var(--text),0_22px_50px_-12px_rgba(255,255,255,0.42)]';
+          'shadow-[0_0_0_2px_rgb(var(--text)),0_22px_50px_-12px_rgba(255,255,255,0.42)]';
 
         return (
           // A entrada escalonada mora AQUI, e nao no botao, porque `animate-*`
@@ -68,6 +68,8 @@ export function CardDeck({ sequence, selected, disabled, onSelect }: CardDeckPro
             <button
               type="button"
               disabled={disabled}
+              aria-pressed={isSelected}
+              aria-label={isSymbol ? 'Votar: não sei' : `Votar ${value}`}
               onClick={() => handleSelect(value)}
               onAnimationEnd={(e) => handleAnimationEnd(value, e)}
               className={cn(
@@ -81,14 +83,15 @@ export function CardDeck({ sequence, selected, disabled, onSelect }: CardDeckPro
                 isDimmed && !disabled && 'opacity-60',
                 isPicking && `animate-card-pick border-text bg-surface-3 ${selectedShadow}`,
                 isSelected && !isPicking &&
-                  `animate-selected-float border-text bg-surface-3 ${selectedShadow}`,
+                  // Sem motion: mesma pose, parada.
+                  `motion-safe:animate-selected-float motion-reduce:-translate-y-5 motion-reduce:scale-110 border-text bg-surface-3 ${selectedShadow}`,
                 !isSelected && !isPicking && 'border-border hover:border-border-strong',
               )}
             >
               {isSelected && !isPicking && (
                 <span
                   aria-hidden
-                  className="absolute -inset-2 rounded-2xl bg-text/15 blur-xl animate-selected-halo pointer-events-none -z-10"
+                  className="absolute -inset-2 rounded-2xl bg-text/15 blur-xl motion-safe:animate-selected-halo motion-reduce:opacity-40 pointer-events-none -z-10"
                 />
               )}
 
@@ -104,10 +107,10 @@ export function CardDeck({ sequence, selected, disabled, onSelect }: CardDeckPro
 
               {isSelected && !isPicking && (
                 <>
-                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] uppercase tracking-[0.18em] font-mono font-semibold text-text whitespace-nowrap animate-fade-in">
+                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.18em] font-mono font-semibold text-text whitespace-nowrap animate-fade-in">
                     Sua carta
                   </span>
-                  <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-text shadow-[0_0_10px_var(--text)]" />
+                  <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-text shadow-[0_0_10px_rgb(var(--text))]" />
                 </>
               )}
             </button>
