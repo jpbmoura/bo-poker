@@ -174,6 +174,7 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
             disabled={busy}
             className="text-subtle hover:text-text transition-colors disabled:opacity-40"
             title="Fechar"
+            aria-label="Fechar"
           >
             <X size={16} />
           </button>
@@ -265,7 +266,7 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
                 disabled={!canThrow}
               >
                 <CaptureBall size={18} />
-                {busy ? 'Lançando...' : 'Lançar Pokébola'}
+                {busy ? 'Lançando…' : 'Lançar Pokébola'}
               </Button>
             )}
 

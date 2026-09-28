@@ -121,7 +121,7 @@ export function RoomCard({ room, onChanged }: RoomCardProps) {
             {room.onlineCount} online
           </span>
         ) : (
-          <span className="text-[11px] text-subtle">vazia</span>
+          <span className="text-[11px] text-subtle">ninguém online</span>
         )}
 
         {/* z-10 para ficar acima do overlay do Link. */}
@@ -165,7 +165,7 @@ export function RoomCard({ room, onChanged }: RoomCardProps) {
                 (confirming ? (
                   <MenuItem onClick={handleDelete} disabled={busy} danger>
                     <Trash2 size={14} />
-                    {busy ? 'Excluindo...' : 'Confirmar exclusão'}
+                    {busy ? 'Excluindo…' : 'Confirmar exclusão'}
                   </MenuItem>
                 ) : (
                   <MenuItem onClick={() => setConfirming(true)} danger>

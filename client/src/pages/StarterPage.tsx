@@ -224,7 +224,7 @@ export default function StarterPage({ title }: StarterPageProps) {
               disabled={!selected || saving}
             >
               {saving
-                ? 'Escolhendo...'
+                ? 'Escolhendo…'
                 : selected
                   ? `Começar com ${selected.stages[0].name}`
                   : 'Escolher'}

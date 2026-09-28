@@ -96,6 +96,7 @@ export function TrainerDialog({ open, onClose }: TrainerDialogProps) {
             onClick={onClose}
             className="text-subtle hover:text-text transition-colors"
             title="Fechar"
+            aria-label="Fechar"
           >
             <X size={16} />
           </button>
@@ -175,7 +176,7 @@ export function TrainerDialog({ open, onClose }: TrainerDialogProps) {
                     onClick={() => void release(selected.id)}
                     disabled={busy}
                   >
-                    {busy ? 'Soltando...' : 'Sim, soltar'}
+                    {busy ? 'Soltando…' : 'Sim, soltar'}
                   </Button>
                   <Button
                     variant="ghost"

@@ -338,7 +338,7 @@ function PlayerCardInner({
                 </motion.span>
                 {isOutlier && (
                   <span className="absolute -top-2 -right-1 text-[10px] uppercase tracking-wider font-mono font-semibold text-highlight bg-bg/80 px-1.5 py-0.5 rounded">
-                    Outlier
+                    Fora da curva
                   </span>
                 )}
                 {/* Sobe e some depois do numero assentar. O valor vem do

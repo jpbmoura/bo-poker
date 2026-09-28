@@ -85,13 +85,13 @@ function VerdictBanner({ verdict, onDismiss }: VerdictBannerProps) {
     },
     outliers: {
       Icon: Zap,
-      text: 'Eficácia variável',
+      text: 'Opiniões divididas',
       classes: 'text-highlight drop-shadow-[0_2px_12px_rgba(245,158,11,0.4)]',
       scale: 0.95,
     },
     near: {
       Icon: ThumbsUp,
-      text: 'Boa convergência',
+      text: 'Quase lá',
       classes: 'text-success drop-shadow-[0_2px_10px_rgb(var(--success)/0.35)]',
       scale: 0.9,
     },

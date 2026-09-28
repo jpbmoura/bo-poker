@@ -376,6 +376,7 @@ export default function RoomPage() {
         roomId={roomId}
         roomName={roomState?.name ?? roomId}
         playerCount={players.length}
+        sequence={sequence}
         isOwner={roomState?.isOwner ?? false}
         onRename={handleRename}
         onDelete={handleDelete}

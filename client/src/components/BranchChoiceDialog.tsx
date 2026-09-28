@@ -118,7 +118,7 @@ export function BranchChoiceDialog({ pokemon }: BranchChoiceDialogProps) {
           disabled={!pickedEntry || busy}
         >
           {busy
-            ? 'Evoluindo...'
+            ? 'Evoluindo…'
             : pickedEntry
               ? `Evoluir para ${pickedEntry.name}`
               : isEevee

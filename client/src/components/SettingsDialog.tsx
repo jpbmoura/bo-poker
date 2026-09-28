@@ -3,6 +3,7 @@ import { Trash2, X } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { normalizeRoomName, ROOM_NAME_MAX_LENGTH } from '../types';
+import type { CardValue } from '../types';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -10,6 +11,7 @@ interface SettingsDialogProps {
   roomId: string;
   roomName: string;
   playerCount: number;
+  sequence: CardValue[];
   isOwner: boolean;
   onRename: (name: string) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -21,6 +23,7 @@ export function SettingsDialog({
   roomId,
   roomName,
   playerCount,
+  sequence,
   isOwner,
   onRename,
   onDelete,
@@ -76,10 +79,11 @@ export function SettingsDialog({
         <div className="flex items-start justify-between mb-5">
           <div>
             <h2 className="text-base font-semibold text-text">Configurações da sala</h2>
-            <p className="text-xs text-subtle mt-1">Detalhes e preferências desta sessão.</p>
+            <p className="text-xs text-subtle mt-1">Nome, link e cartas desta sala.</p>
           </div>
           <button
             onClick={onClose}
+            aria-label="Fechar"
             className="w-8 h-8 -mr-2 -mt-2 rounded-md text-muted hover:text-text hover:bg-surface-2 flex items-center justify-center transition-colors"
           >
             <X size={16} />
@@ -89,11 +93,12 @@ export function SettingsDialog({
         <div className="flex flex-col gap-3">
           {isOwner ? (
             <form onSubmit={handleRename} className="flex flex-col gap-2">
-              <label className="text-xs uppercase tracking-wider text-subtle">
+              <label htmlFor="room-name" className="text-xs uppercase tracking-wider text-subtle">
                 Nome da sala
               </label>
               <div className="flex items-center gap-2">
                 <input
+                  id="room-name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -101,7 +106,7 @@ export function SettingsDialog({
                   className="flex-1 bg-surface-2 border border-border rounded-lg px-3.5 py-2.5 text-sm text-text placeholder:text-subtle outline-none focus:border-highlight/60 focus:ring-2 focus:ring-highlight/15 focus:bg-surface-3 transition-colors"
                 />
                 <Button type="submit" variant="secondary" disabled={!dirty || saving}>
-                  {saving ? 'Salvando...' : 'Salvar'}
+                  {saving ? 'Salvando…' : 'Salvar'}
                 </Button>
               </div>
             </form>
@@ -111,7 +116,7 @@ export function SettingsDialog({
 
           <Row label="ID da sala" value={<span className="font-mono">{roomId}</span>} />
           <Row label="Jogadores" value={`${playerCount}`} />
-          <Row label="Sequência" value="Fibonacci (0–21) + ?" />
+          <Row label="Cartas" value={<span className="font-mono">{sequence.join(' · ')}</span>} />
         </div>
 
         {error && (
@@ -134,7 +139,7 @@ export function SettingsDialog({
                 <div className="flex items-center gap-2">
                   <Button variant="danger" onClick={handleDelete} disabled={deleting}>
                     <Trash2 size={14} />
-                    {deleting ? 'Excluindo...' : 'Excluir definitivamente'}
+                    {deleting ? 'Excluindo…' : 'Excluir definitivamente'}
                   </Button>
                   <Button
                     variant="ghost"
@@ -155,8 +160,8 @@ export function SettingsDialog({
         )}
 
         <p className="mt-6 text-xs text-subtle leading-relaxed">
-          Login pelo GitHub identifica você na mesa. A sala e os favoritos ficam
-          salvos; o estado da rodada vive em memória e zera quando a sala esvazia.
+          A sala e os favoritos ficam salvos. Os votos da rodada somem quando todo
+          mundo sai.
         </p>
       </div>
     </Dialog>

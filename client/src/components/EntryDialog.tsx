@@ -151,7 +151,7 @@ export function EntryDialog({
         {!connected && (
           <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-border text-subtle animate-fade-in">
             <PokeballIcon spinning size={12} className="text-subtle" />
-            <span className="text-xs">Conectando ao servidor...</span>
+            <span className="text-xs">Conectando…</span>
           </div>
         )}
 
@@ -162,7 +162,7 @@ export function EntryDialog({
           className="w-full mt-6 press-down"
           disabled={!canSubmit}
         >
-          {joining ? 'Entrando...' : 'Entrar na sala'}
+          {joining ? 'Entrando…' : 'Entrar na sala'}
         </Button>
       </form>
     </Dialog>
