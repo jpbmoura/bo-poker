@@ -15,6 +15,7 @@ import { disconnectSocket } from '../services/socket';
 import { createRoom, listRooms, type RoomSummary } from '../services/rooms';
 import { normalizeRoomId } from '../types';
 import { toast } from '../store/useToastStore';
+import { cn } from '../utils/cn';
 
 /** Avisos que chegam de outra rota via `location.state` (ver RoomPage). */
 const NOTICES: Record<string, string> = {
@@ -36,6 +37,15 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+
+  // O segundo clique de "sair" expira: deixar armado para sempre surpreenderia.
+  useEffect(() => {
+    if (!confirmSignOut) return;
+    const t = window.setTimeout(() => setConfirmSignOut(false), 3000);
+    return () => window.clearTimeout(t);
+  }, [confirmSignOut]);
 
   const noticeKey = (location.state as { notice?: string } | null)?.notice;
 
@@ -119,7 +129,10 @@ export default function HomePage() {
     // mesma sala. `encodeURIComponent` deixa de ser necessario: o id
     // normalizado e sempre [A-Z0-9].
     const id = normalizeRoomId(code);
-    if (!id) return;
+    if (!id) {
+      setCodeError('Código inválido. Use só letras e números.');
+      return;
+    }
     navigate(`/room/${id}`);
   };
 
@@ -140,11 +153,12 @@ export default function HomePage() {
               <button
                 onClick={() => setTrainerOpen(true)}
                 title="Meus Pokémon"
-                className="hidden sm:flex w-[190px] px-2.5 py-1.5 rounded-lg hover:bg-surface-2 transition-colors"
+                aria-label="Meus Pokémon"
+                className="flex w-[150px] sm:w-[190px] px-2.5 py-1.5 rounded-lg hover:bg-surface-2 transition-colors"
               >
                 <TrainerBadge pokemon={active} compact />
               </button>
-              <div className="text-right leading-tight">
+              <div className="hidden sm:block text-right leading-tight">
                 <div className="text-xs text-muted truncate max-w-[160px]">
                   {session.user.name}
                 </div>
@@ -154,13 +168,29 @@ export default function HomePage() {
                   </div>
                 )}
               </div>
-              <button
-                onClick={handleSignOut}
-                title="Sair da conta"
-                className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:text-danger hover:bg-danger-soft transition-colors active:scale-90"
-              >
-                <LogOut size={16} />
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => (confirmSignOut ? void handleSignOut() : setConfirmSignOut(true))}
+                  title={confirmSignOut ? 'Clique de novo para sair' : 'Sair da conta'}
+                  aria-label={confirmSignOut ? 'Clique de novo para sair' : 'Sair da conta'}
+                  className={cn(
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors active:scale-90',
+                    confirmSignOut
+                      ? 'text-danger bg-danger-soft'
+                      : 'text-muted hover:text-danger hover:bg-danger-soft',
+                  )}
+                >
+                  <LogOut size={16} />
+                </button>
+                {confirmSignOut && (
+                  <span
+                    role="status"
+                    className="absolute right-0 top-full mt-2 px-2.5 py-1.5 rounded-lg bg-surface-2 border border-danger/30 text-xs text-danger whitespace-nowrap shadow-lg animate-fade-in z-30"
+                  >
+                    Clique de novo para sair
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -191,30 +221,44 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <form onSubmit={handleJoin} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="CÓDIGO"
-                aria-label="Código da sala"
-                className="w-[130px] bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-subtle outline-none focus:border-highlight/60 focus:ring-2 focus:ring-highlight/15 focus:bg-surface-3 transition-colors uppercase tracking-wider font-mono"
-                maxLength={20}
-              />
-              <Button
-                type="submit"
-                variant="secondary"
-                disabled={code.trim().length === 0}
-              >
-                Entrar
-                <ArrowRight size={14} />
-              </Button>
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 w-full sm:w-auto">
+            <form onSubmit={handleJoin} className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => {
+                    setCode(e.target.value.toUpperCase());
+                    setCodeError(null);
+                  }}
+                  placeholder="CÓDIGO"
+                  aria-label="Código da sala"
+                  aria-invalid={codeError !== null}
+                  aria-describedby={codeError ? 'join-code-error' : undefined}
+                  className="flex-1 sm:flex-none sm:w-[130px] min-w-0 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-subtle outline-none focus:border-highlight/60 focus:ring-2 focus:ring-highlight/15 focus:bg-surface-3 transition-colors uppercase tracking-wider font-mono"
+                  maxLength={20}
+                />
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  disabled={code.trim().length === 0}
+                >
+                  Entrar
+                  <ArrowRight size={14} />
+                </Button>
+              </div>
+              {codeError && (
+                <span id="join-code-error" role="alert" className="text-xs text-danger animate-fade-in">
+                  {codeError}
+                </span>
+              )}
             </form>
+
+            <span className="hidden sm:block self-center text-xs text-subtle px-1">ou</span>
 
             <Button variant="solid" onClick={handleCreate} disabled={creating}>
               <Plus size={14} />
-              {creating ? 'Criando...' : 'Criar sala'}
+              {creating ? 'Criando…' : 'Criar sala'}
             </Button>
           </div>
         </div>
@@ -265,10 +309,11 @@ function EmptyState({
     <div className="py-16 flex flex-col items-center animate-fade-in">
       <div className="w-full max-w-sm text-center">
         <h2 className="text-2xl font-semibold text-text tracking-tight mb-2">
-          Estimar em equipe
+          Nenhuma sala ainda
         </h2>
         <p className="text-sm text-muted mb-8">
-          Crie sua primeira sala. Ela fica salva aqui para a próxima vez.
+          Crie uma sala e mande o link para o time estimar junto. Ela fica salva aqui
+          para as próximas sessões.
         </p>
         <Button
           variant="solid"
@@ -277,7 +322,7 @@ function EmptyState({
           onClick={onCreate}
           disabled={creating}
         >
-          {creating ? 'Criando...' : 'Criar nova sala'}
+          {creating ? 'Criando…' : 'Criar primeira sala'}
           <ArrowRight
             size={14}
             className="transition-transform group-hover:translate-x-0.5"

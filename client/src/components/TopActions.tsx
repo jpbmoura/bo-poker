@@ -14,17 +14,28 @@ interface TopActionsProps {
 
 export function TopActions({ me, onSignOut }: TopActionsProps) {
   const [open, setOpen] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [trainerOpen, setTrainerOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const { active } = useTrainer();
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setConfirmSignOut(false);
+      return;
+    }
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
   }, [open]);
 
   // O progresso vem do estado da MESA (que já chega por socket) e cai no da
@@ -36,12 +47,16 @@ export function TopActions({ me, onSignOut }: TopActionsProps) {
 
   return (
     <>
-      <div className="fixed top-4 right-4 z-20 animate-fade-in" ref={ref}>
+      <div className="relative" ref={ref}>
         <button
           onClick={() => setOpen((o) => !o)}
+          aria-label="Abrir menu da conta"
+          aria-haspopup="menu"
+          aria-expanded={open}
           className={cn(
-            'relative w-14 h-14 rounded-full flex items-center justify-center',
-            'border-2 border-border bg-surface-2 p-1.5',
+            'relative w-11 h-11 rounded-full flex items-center justify-center',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+            'border-2 border-border bg-surface-2 p-1',
             'hover:border-border-strong transition-all duration-200 active:scale-95',
             open && 'border-border-strong shadow-[0_0_0_3px_rgba(255,255,255,0.06)]',
           )}
@@ -72,7 +87,7 @@ export function TopActions({ me, onSignOut }: TopActionsProps) {
         </button>
 
         {open && me && (
-          <div className="absolute right-0 top-16 min-w-[230px] bg-surface border border-border rounded-xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.6)] p-4 animate-fade-up">
+          <div role="menu" className="absolute right-0 top-14 min-w-[230px] bg-surface border border-border rounded-xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.6)] p-4 animate-fade-up">
             <div className="text-[11px] uppercase tracking-[0.18em] text-subtle mb-1.5">
               Você
             </div>
@@ -92,6 +107,7 @@ export function TopActions({ me, onSignOut }: TopActionsProps) {
             )}
 
             <button
+              role="menuitem"
               onClick={() => {
                 setOpen(false);
                 setTrainerOpen(true);
@@ -102,12 +118,19 @@ export function TopActions({ me, onSignOut }: TopActionsProps) {
               Meus Pokémon
             </button>
 
+            {/* Dois cliques: sair da conta tira você da mesa e da sessão. */}
             <button
-              onClick={onSignOut}
-              className="w-full flex items-center gap-2 px-2.5 py-2 -mx-0.5 rounded-lg text-xs text-muted hover:text-danger hover:bg-danger-soft transition-colors"
+              role="menuitem"
+              onClick={() => (confirmSignOut ? onSignOut() : setConfirmSignOut(true))}
+              className={cn(
+                'w-full flex items-center gap-2 px-2.5 py-2 -mx-0.5 rounded-lg text-xs transition-colors',
+                confirmSignOut
+                  ? 'text-danger bg-danger-soft'
+                  : 'text-muted hover:text-danger hover:bg-danger-soft',
+              )}
             >
               <LogOut size={13} />
-              Sair da conta
+              {confirmSignOut ? 'Clique de novo para sair' : 'Sair da conta'}
             </button>
           </div>
         )}

@@ -34,6 +34,8 @@ export function IconSidebar({
 }: IconSidebarProps) {
   const [copied, setCopied] = useState(false);
   const [cleared, setCleared] = useState(false);
+  // Sair da sala é destrutivo (libera o assento): pede um segundo clique.
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   // Ambos os timers vazavam: setState depois do unmount se a pessoa saisse da
   // sala dentro dos 1,5s do feedback.
@@ -52,6 +54,15 @@ export function IconSidebar({
       setCopied(true);
       timers.current.push(window.setTimeout(() => setCopied(false), 1500));
     }
+  };
+
+  const handleLeave = () => {
+    if (confirmLeave) {
+      onLeave();
+      return;
+    }
+    setConfirmLeave(true);
+    timers.current.push(window.setTimeout(() => setConfirmLeave(false), 3000));
   };
 
   const handleClear = () => {
@@ -134,9 +145,24 @@ export function IconSidebar({
 
       <div className="flex-1" />
 
-      <SidebarButton onClick={onLeave} title="Sair da sala" danger>
-        <LogOut size={16} />
-      </SidebarButton>
+      <div className="relative">
+        <SidebarButton
+          onClick={handleLeave}
+          title={confirmLeave ? 'Clique de novo para sair' : 'Sair da sala'}
+          danger
+          armed={confirmLeave}
+        >
+          <LogOut size={16} />
+        </SidebarButton>
+        {confirmLeave && (
+          <span
+            role="status"
+            className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2.5 py-1.5 rounded-lg bg-surface-2 border border-danger/30 text-xs text-danger whitespace-nowrap shadow-lg animate-fade-in pointer-events-none"
+          >
+            Clique de novo para sair
+          </span>
+        )}
+      </div>
     </aside>
   );
 }
@@ -147,12 +173,14 @@ function SidebarButton({
   title,
   danger,
   disabled,
+  armed,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   title: string;
   danger?: boolean;
   disabled?: boolean;
+  armed?: boolean;
 }) {
   return (
     <button
@@ -169,6 +197,7 @@ function SidebarButton({
           ? 'text-muted hover:bg-danger-soft hover:text-danger'
           : 'text-muted hover:bg-surface-2 hover:text-text'),
         disabled && 'text-subtle',
+        armed && 'bg-danger-soft text-danger',
       )}
     >
       {children}

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '../services/auth';
 import { connectSocket, getSocket } from '../services/socket';
-import { PokeballIcon } from './ui/PokeballIcon';
+import { FullScreenLoader } from './ui/FullScreenLoader';
 
 /**
  * Portão de sessão e shell do app — antes disto não existia nenhum layout
@@ -55,11 +55,7 @@ export function RequireAuth() {
   }, [navigate, location.pathname]);
 
   if (isPending) {
-    return (
-      <div className="min-h-screen bg-dot-grid flex items-center justify-center text-muted">
-        <PokeballIcon spinning size={28} className="text-muted/60" />
-      </div>
-    );
+    return <FullScreenLoader label="Verificando sua sessão…" />;
   }
 
   if (!session) {

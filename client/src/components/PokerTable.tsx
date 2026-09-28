@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
-import { Sparkles, Zap, ThumbsUp } from 'lucide-react';
+import { Sparkles, Zap, ThumbsUp, Link2 } from 'lucide-react';
 import { PlayerCard } from './PlayerCard';
 import { Confetti } from './Confetti';
 import { PokeballIcon } from './ui/PokeballIcon';
@@ -22,6 +22,8 @@ interface PokerTableProps {
    * dessincronizar na primeira mudança aqui.
    */
   onCeremonyBusyChange?: (busy: boolean) => void;
+  /** Atalho no estado vazio: mesa sem ninguém votando pede convite. */
+  onCopyLink?: () => void;
 }
 
 const PREP_MS = 380;
@@ -122,6 +124,7 @@ export function PokerTable({
   outlierIds,
   gainByPlayerId,
   onCeremonyBusyChange,
+  onCopyLink,
 }: PokerTableProps) {
   const [charging, setCharging] = useState(false);
   const [flipReady, setFlipReady] = useState(false);
@@ -302,8 +305,20 @@ export function PokerTable({
         </AnimatePresence>
 
         {voters.length === 0 ? (
-          <div className="text-center py-10 text-subtle text-sm animate-fade-in">
-            Esperando jogadores entrarem...
+          <div className="flex flex-col items-center text-center py-10 animate-fade-in">
+            <div className="text-sm text-text font-medium">Ninguém votando ainda</div>
+            <p className="mt-1 text-sm text-muted max-w-xs">
+              Mande o link para o time entrar na mesa.
+            </p>
+            {onCopyLink && (
+              <button
+                onClick={onCopyLink}
+                className="mt-4 inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm text-text bg-surface-2 border border-border-strong hover:bg-surface-3 transition-colors press-down focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight/70"
+              >
+                <Link2 size={14} />
+                Copiar link da sala
+              </button>
+            )}
           </div>
         ) : (
           <LayoutGroup>

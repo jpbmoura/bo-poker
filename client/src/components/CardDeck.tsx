@@ -68,6 +68,8 @@ export function CardDeck({ sequence, selected, disabled, onSelect }: CardDeckPro
             <button
               type="button"
               disabled={disabled}
+              aria-pressed={isSelected}
+              aria-label={isSymbol ? 'Votar: não sei' : `Votar ${value}`}
               onClick={() => handleSelect(value)}
               onAnimationEnd={(e) => handleAnimationEnd(value, e)}
               className={cn(
