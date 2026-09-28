@@ -117,7 +117,7 @@ export function RoomCard({ room, onChanged }: RoomCardProps) {
       <div className="mt-auto flex items-center justify-between">
         {room.onlineCount > 0 ? (
           <span className="flex items-center gap-1.5 text-[11px] text-success">
-            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-success motion-safe:animate-pulse" />
             {room.onlineCount} online
           </span>
         ) : (

@@ -5,6 +5,7 @@ import type { SerializedPlayer } from '../types';
 import { PokeballIcon } from './ui/PokeballIcon';
 import { CountUpValue } from './CountUpValue';
 import { StagePips, XpBar } from './TrainerProgressBits';
+import { REVEAL } from '../lib/motion';
 
 interface PlayerCardProps {
   player: SerializedPlayer;
@@ -23,8 +24,8 @@ interface PlayerCardProps {
   gainedXp?: number;
 }
 
-const FLIP_DURATION_S = 0.7;
-const EMERGE_DURATION_S = 0.7;
+const FLIP_DURATION_S = REVEAL.flipMs / 1000;
+const EMERGE_DURATION_S = 0.6;
 // Pokemon emerges when card hits 90° (edge-on, mid-flip)
 const EMERGE_OFFSET_S = FLIP_DURATION_S * 0.5;
 
@@ -276,9 +277,9 @@ function PlayerCardInner({
                 >
                   {isWaiting ? (
                     <span className="flex items-center gap-1 text-muted">
-                      <span className="w-1.5 h-1.5 rounded-full bg-muted animate-pulse [animation-delay:0ms]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-muted animate-pulse [animation-delay:180ms]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-muted animate-pulse [animation-delay:360ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted motion-safe:animate-pulse [animation-delay:0ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted motion-safe:animate-pulse [animation-delay:180ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted motion-safe:animate-pulse [animation-delay:360ms]" />
                     </span>
                   ) : sprite ? (
                     <img
@@ -307,7 +308,8 @@ function PlayerCardInner({
                   'relative w-full h-full rounded-xl border bg-surface-2 flex items-center justify-center shadow-sm overflow-hidden',
                   isSelf ? 'border-border-strong' : 'border-border',
                   glowing && 'animate-glow-once',
-                  isOutlier && 'animate-outlier-ring border-highlight/70',
+                  isOutlier &&
+                    'motion-safe:animate-outlier-ring motion-reduce:shadow-[0_0_0_2px_rgb(var(--highlight)/0.8)] border-highlight/70',
                 )}
               >
                 <motion.span

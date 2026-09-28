@@ -23,3 +23,18 @@ export const exit: Transition = { duration: DURATION.fast, ease: 'easeIn' };
 /** Mola para elementos que "assentam" (layout, pop de feedback). */
 export const springSnappy: Transition = { type: 'spring', stiffness: 420, damping: 32 };
 export const springSoft: Transition = { type: 'spring', stiffness: 220, damping: 20 };
+
+/**
+ * Coreografia do reveal. Mesa e cartas leem daqui para o flip e a espera
+ * nunca dessincronizarem. Mais curta que a original (~2-3 s até o veredito):
+ * a graça continua, a espera não.
+ */
+export const REVEAL = {
+  /** Vinheta de "carga" antes do primeiro flip. */
+  prepMs: 250,
+  flipMs: 520,
+  /** Atraso entre cartas, do centro para fora. */
+  waveStepMs: 70,
+  /** Teto da onda inteira: com mesa cheia o passo encolhe em vez de esticar. */
+  waveMaxMs: 450,
+} as const;

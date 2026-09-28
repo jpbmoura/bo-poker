@@ -80,11 +80,12 @@ export default {
         },
         'selected-halo': {
           '0%, 100%': { opacity: '0.35', transform: 'scale(1)' },
-          '50%': { opacity: '0.65', transform: 'scale(1.06)' },
+          '50%': { opacity: '0.55', transform: 'scale(1.04)' },
         },
+        // Pose de repouso da carta escolhida (-20px, 1.1) com respiro de 2px.
         'selected-float': {
           '0%, 100%': { transform: 'translateY(-20px) scale(1.1)' },
-          '50%': { transform: 'translateY(-23px) scale(1.1)' },
+          '50%': { transform: 'translateY(-22px) scale(1.1)' },
         },
         'outlier-ring': {
           '0%, 100%': {
@@ -105,8 +106,8 @@ export default {
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
         'glow-once': 'glow-once 2.4s ease-out 1',
         'card-pick': 'card-pick 540ms cubic-bezier(0.34, 1.6, 0.64, 1) forwards',
-        'selected-halo': 'selected-halo 2.6s ease-in-out infinite',
-        'selected-float': 'selected-float 2.8s ease-in-out infinite',
+        'selected-halo': 'selected-halo 3.2s ease-in-out infinite',
+        'selected-float': 'selected-float 3.2s ease-in-out infinite',
         'outlier-ring': 'outlier-ring 2.2s ease-in-out infinite',
       },
     },

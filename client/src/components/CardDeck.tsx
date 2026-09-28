@@ -83,14 +83,15 @@ export function CardDeck({ sequence, selected, disabled, onSelect }: CardDeckPro
                 isDimmed && !disabled && 'opacity-60',
                 isPicking && `animate-card-pick border-text bg-surface-3 ${selectedShadow}`,
                 isSelected && !isPicking &&
-                  `animate-selected-float border-text bg-surface-3 ${selectedShadow}`,
+                  // Sem motion: mesma pose, parada.
+                  `motion-safe:animate-selected-float motion-reduce:-translate-y-5 motion-reduce:scale-110 border-text bg-surface-3 ${selectedShadow}`,
                 !isSelected && !isPicking && 'border-border hover:border-border-strong',
               )}
             >
               {isSelected && !isPicking && (
                 <span
                   aria-hidden
-                  className="absolute -inset-2 rounded-2xl bg-text/15 blur-xl animate-selected-halo pointer-events-none -z-10"
+                  className="absolute -inset-2 rounded-2xl bg-text/15 blur-xl motion-safe:animate-selected-halo motion-reduce:opacity-40 pointer-events-none -z-10"
                 />
               )}
 

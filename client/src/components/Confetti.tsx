@@ -19,6 +19,8 @@ export function Confetti({ active, className }: ConfettiProps) {
     fireRef.current = confetti.create(canvasRef.current, {
       resize: true,
       useWorker: true,
+      // prefers-reduced-motion: nada de partículas voando pela tela.
+      disableForReducedMotion: true,
     });
     return () => {
       fireRef.current?.reset();

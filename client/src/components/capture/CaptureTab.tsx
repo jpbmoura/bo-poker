@@ -27,7 +27,7 @@ export function CaptureTab({ capture, onOpen }: CaptureTabProps) {
       className={cn(
         'fixed right-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-2 py-3 pl-2 pr-1.5',
         'rounded-l-xl border border-r-0 bg-surface transition-all hover:pr-3 animate-fade-in',
-        available ? 'border-highlight/50 animate-pulse-glow' : 'border-border',
+        available ? 'border-highlight/50 motion-safe:animate-pulse-glow' : 'border-border',
       )}
     >
       <img
