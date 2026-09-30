@@ -30,6 +30,7 @@ export function deckIndexOf(vote: CardValue): number {
 
 /**
  * Um voto na perspectiva do placar. Espectadores NÃO entram — quem chama filtra.
+ * O XP deles sai pronto em `RoundScore.spectatorXp`.
  */
 export interface Ballot {
   playerId: string;
@@ -45,6 +46,11 @@ export interface RoundScore {
   targetIndex: number | null;
   /** XP por jogador. Todo votante elegível aparece, inclusive com 0. */
   gainByPlayerId: Map<string, number>;
+  /**
+   * XP de cada espectador: a média do XP dos votos numéricos. Quanto mais a mesa
+   * converge para a média, mais quem assiste ganha. 0 quando a rodada não pontua.
+   */
+  spectatorXp: number;
 }
 
 /**
@@ -93,7 +99,13 @@ export function scoreRound(ballots: Ballot[]): RoundScore {
   // A trava vem ANTES do consenso de propósito: numa mesa de 2 pessoas votando
   // igual as duas regras se contradizem, e quem tem de vencer é a trava.
   if (numeric.length < MIN_NUMERIC_VOTES) {
-    return { awarded: false, consensus: false, targetIndex: null, gainByPlayerId };
+    return {
+      awarded: false,
+      consensus: false,
+      targetIndex: null,
+      gainByPlayerId,
+      spectatorXp: 0,
+    };
   }
 
   const values = numeric.map((v) => Number(v.vote));
@@ -109,15 +121,23 @@ export function scoreRound(ballots: Ballot[]): RoundScore {
       consensus: true,
       targetIndex: deckIndexOf(numeric[0].vote as CardValue),
       gainByPlayerId,
+      spectatorXp: CONSENSUS_XP,
     };
   }
 
   const average = values.reduce((a, b) => a + b, 0) / values.length;
   const target = targetIndex(average);
+  let totalGain = 0;
   for (const v of numeric) {
     const distance = Math.abs(deckIndexOf(v.vote as CardValue) - target);
-    gainByPlayerId.set(v.playerId, xpForDistance(distance));
+    const gain = xpForDistance(distance);
+    gainByPlayerId.set(v.playerId, gain);
+    totalGain += gain;
   }
 
-  return { awarded: true, consensus: false, targetIndex: target, gainByPlayerId };
+  // Só quem deu estimativa numérica entra na média: `?` e quem não votou dizem
+  // sobre participação, não sobre o acerto da mesa.
+  const spectatorXp = Math.round(totalGain / numeric.length);
+
+  return { awarded: true, consensus: false, targetIndex: target, gainByPlayerId, spectatorXp };
 }

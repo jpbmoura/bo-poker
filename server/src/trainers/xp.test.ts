@@ -172,3 +172,33 @@ test('é determinístico: mesma entrada, mesma saída', () => {
   const ballots = [ballot('3'), ballot('8'), ballot('13')];
   assert.deepEqual(gains(ballots), gains(ballots));
 });
+
+test('espectador ganha a média do XP dos votos numéricos', () => {
+  // 5, 8, 13 pagam 7 / 10 / 8 -> média 8.33 -> 8
+  assert.equal(scoreRound([ballot('5'), ballot('8'), ballot('13')]).spectatorXp, 8);
+  // 1, 5, 8, 8, 3 pagam 3 / 10 / 8 / 8 / 8 -> média 7.4 -> 7
+  assert.equal(
+    scoreRound([ballot('1'), ballot('5'), ballot('8'), ballot('8'), ballot('3')]).spectatorXp,
+    7,
+  );
+});
+
+test('espectador ganha mais quando a mesa converge', () => {
+  const tight = scoreRound([ballot('5'), ballot('8'), ballot('8')]).spectatorXp;
+  const spread = scoreRound([ballot('1'), ballot('8'), ballot('21')]).spectatorXp;
+  assert.ok(tight > spread);
+});
+
+test('no consenso o espectador ganha o mesmo que a mesa', () => {
+  assert.equal(scoreRound([ballot('5'), ballot('5'), ballot('5')]).spectatorXp, CONSENSUS_XP);
+});
+
+test('rodada que não pontua não paga o espectador', () => {
+  assert.equal(scoreRound([ballot('5'), ballot('5')]).spectatorXp, 0);
+  assert.equal(scoreRound([]).spectatorXp, 0);
+});
+
+test('? e quem não votou não puxam a média do espectador para baixo', () => {
+  const score = scoreRound([ballot('5'), ballot('8'), ballot('13'), ballot('?'), ballot(null)]);
+  assert.equal(score.spectatorXp, 8);
+});

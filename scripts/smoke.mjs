@@ -357,6 +357,8 @@ const playerOf = (client, playerId) =>
   const x = await makeClient('Xp1', { cookie: cookieX, room: xpRoom });
   const y = await makeClient('Xp2', { cookie: cookieY, room: xpRoom });
   const z = await makeClient('Xp3', { cookie: cookieZ, room: xpRoom });
+  const cookieW = await signUp('XpEsp', { lineId: 'totodile' });
+  const w = await makeClient('XpEsp', { cookie: cookieW, room: xpRoom, role: 'spectator' });
 
   const gainsOf = (client) =>
     Object.fromEntries((client.roundResult?.xp ?? []).map((e) => [e.playerId, e.gained]));
@@ -380,6 +382,8 @@ const playerOf = (client, playerId) =>
   expect(gains[x.playerId] === 7, `distancia: quem votou 5 leva 7 (levou ${gains[x.playerId]})`);
   expect(gains[y.playerId] === 10, `distancia: quem votou 8 leva 10 (levou ${gains[y.playerId]})`);
   expect(gains[z.playerId] === 8, `distancia: quem votou 13 leva 8 (levou ${gains[z.playerId]})`);
+  // Espectador leva a media do XP da mesa: (7 + 10 + 8) / 3 = 8.33 -> 8
+  expect(gains[w.playerId] === 8, `espectador leva a media da mesa, 8 (levou ${gains[w.playerId]})`);
 
   const xAfter = x.state.players.find((p) => p.id === x.playerId);
   expect(xAfter?.progress?.xp === 7, 'o XP ganho aparece no room:state');
@@ -392,6 +396,7 @@ const playerOf = (client, playerId) =>
     Object.values(gainsOf(x)).every((g) => g === 0),
     'ninguem ganha XP numa rodada travada',
   );
+  expect(!gainsOf(x)[w.playerId], 'espectador tambem nao ganha numa rodada travada');
   await newRound();
 
   // Consenso: dobro para todo mundo.
@@ -401,6 +406,7 @@ const playerOf = (client, playerId) =>
     Object.values(gainsOf(x)).every((g) => g === 20),
     'consenso paga o dobro (20) para cada votante',
   );
+  expect(gainsOf(x)[w.playerId] === 20, 'no consenso o espectador tambem leva 20');
   await newRound();
 
   // Evolucao: consenso rende 20/rodada, entao 250 XP chega em 13 rodadas.

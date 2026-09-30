@@ -28,6 +28,8 @@ interface PokerTableProps {
 }
 
 const PREP_MS = REVEAL.prepMs;
+/** O `+N XP` dos espectadores espera a onda de flips inteira assentar. */
+const SPECTATOR_XP_DELAY_S = (REVEAL.prepMs + REVEAL.waveMaxMs + REVEAL.flipMs) / 1000;
 const FLIP_BASE_MS = REVEAL.flipMs;
 /**
  * Quando a mesa é considerada livre depois do reveal.
@@ -387,6 +389,19 @@ export function PokerTable({
                   {s.name}
                   {s.id === myPlayerId && <span className="text-subtle"> (você)</span>}
                 </span>
+                {/* Espectador ganha pelo acerto da mesa. Fica no chip (e não sobe
+                    e some como o dos cards) e só entra depois que a onda de flips
+                    termina, para não entregar o resultado antes das cartas. */}
+                {revealed && (gainByPlayerId?.[s.id] ?? 0) > 0 && (
+                  <motion.span
+                    className="text-[10px] font-mono font-semibold text-success"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: SPECTATOR_XP_DELAY_S }}
+                  >
+                    +{gainByPlayerId?.[s.id]} XP
+                  </motion.span>
+                )}
               </div>
             ))}
           </div>

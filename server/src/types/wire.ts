@@ -138,6 +138,10 @@ export interface RoundResultPayload {
   consensus: boolean;
   /** Índice fracionário alvo no deck; null quando a rodada não pontuou. */
   targetIndex: number | null;
+  /**
+   * Votantes elegíveis e espectadores online. Espectador ganha a média do XP
+   * dos votos numéricos (ou nada, quando a rodada não pontuou).
+   */
   xp: Array<{ playerId: string; gained: number; total: number }>;
 }
 

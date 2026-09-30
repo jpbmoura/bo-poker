@@ -1,5 +1,5 @@
 import type { Room } from '../rooms/Room.js';
-import type { EvolutionEvent, RoundResultPayload } from '../types/index.js';
+import type { EvolutionEvent, Player, RoundResultPayload } from '../types/index.js';
 import { TrainerCache } from './index.js';
 import { formAt, isPendingChoice, liveStage } from './species.js';
 import { scoreRound, type Ballot } from './xp.js';
@@ -28,10 +28,7 @@ export function applyRoundXp(room: Room): AwardedRound {
   const evolutions: EvolutionEvent[] = [];
   const xp: RoundResultPayload['xp'] = [];
 
-  for (const player of voters) {
-    const gained = score.gainByPlayerId.get(player.id);
-    if (gained === undefined) continue;
-
+  const credit = (player: Player, gained: number): void => {
     // Quem não tem Pokémon (nunca escolheu, ou leitura degradada) não tem linha
     // para avançar. Entra no payload com 0 em vez de sumir da mesa.
     const applied = gained > 0 ? TrainerCache.applyXp(player.userId, gained) : null;
@@ -61,6 +58,20 @@ export function applyRoundXp(room: Room): AwardedRound {
       gained: applied ? gained : 0,
       total: player.trainer?.xp ?? 0,
     });
+  };
+
+  for (const player of voters) {
+    const gained = score.gainByPlayerId.get(player.id);
+    if (gained === undefined) continue;
+    credit(player, gained);
+  }
+
+  // Espectador ganha pelo acerto da mesa. Só quem está online: uma aba
+  // esquecida numa sala movimentada não pode virar farm.
+  if (score.spectatorXp > 0) {
+    for (const player of room.allPlayers()) {
+      if (player.role === 'spectator' && player.online) credit(player, score.spectatorXp);
+    }
   }
 
   return {
