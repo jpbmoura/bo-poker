@@ -41,6 +41,7 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        pixel: ['"Pixelify Sans"', 'JetBrains Mono', 'monospace'],
       },
       keyframes: {
         'shake': {
@@ -87,6 +88,31 @@ export default {
           '0%, 100%': { transform: 'translateY(-20px) scale(1.1)' },
           '50%': { transform: 'translateY(-22px) scale(1.1)' },
         },
+        // Batalha: entrada dos lutadores, cortina de abertura e respiros em "frames".
+        'enter-from-left': {
+          '0%': { transform: 'translateX(-140%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+        'enter-from-right': {
+          '0%': { transform: 'translateX(140%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+        'curtain-up': {
+          '0%': { transform: 'scaleY(1)' },
+          '100%': { transform: 'scaleY(0)' },
+        },
+        'stripe-in': {
+          '0%': { transform: 'scaleX(0)' },
+          '100%': { transform: 'scaleX(1)' },
+        },
+        'caret-bounce': {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(2px)' },
+        },
+        'idle-bob': {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-3px)' },
+        },
         'outlier-ring': {
           '0%, 100%': {
             boxShadow:
@@ -109,6 +135,12 @@ export default {
         'selected-halo': 'selected-halo 3.2s ease-in-out infinite',
         'selected-float': 'selected-float 3.2s ease-in-out infinite',
         'outlier-ring': 'outlier-ring 2.2s ease-in-out infinite',
+        'enter-from-left': 'enter-from-left 700ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both',
+        'enter-from-right': 'enter-from-right 700ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both',
+        'curtain-up': 'curtain-up 520ms cubic-bezier(0.7, 0, 0.84, 0) 120ms both',
+        'stripe-in': 'stripe-in 380ms steps(6, end) both',
+        'caret-bounce': 'caret-bounce 700ms steps(2, jump-none) infinite',
+        'idle-bob': 'idle-bob 900ms steps(2, jump-none) infinite',
       },
     },
   },

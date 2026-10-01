@@ -5,6 +5,8 @@
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/700.css';
+@import '@fontsource/pixelify-sans/400.css';
+@import '@fontsource/pixelify-sans/600.css';
 
 @tailwind base;
 @tailwind components;
@@ -107,4 +109,49 @@ body {
 .focus-ring:focus-visible {
   outline: 2px solid rgb(var(--highlight) / 0.8);
   outline-offset: 2px;
+}
+
+/* ── Batalha ─────────────────────────────────────────────────────────────
+   Paleta do HUD de GBA, escopada para não vazar para o resto do app. */
+.battle-scope {
+  --gba-frame: 248 246 222;  /* creme do HUD */
+  --gba-ink: 40 46 52;       /* texto escuro do HUD */
+  --gba-edge: 58 64 74;      /* contorno */
+  --gba-dialog: 32 38 50;    /* fundo da caixa de texto */
+  --gba-dialog-edge: 214 160 72;
+}
+
+.gba-hud {
+  background: rgb(var(--gba-frame));
+  color: rgb(var(--gba-ink));
+  border: 2px solid rgb(var(--gba-edge));
+  border-radius: 12px 3px 12px 3px;
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 0.55),
+    inset 0 -3px 0 rgb(var(--gba-edge) / 0.18),
+    3px 3px 0 rgb(0 0 0 / 0.35);
+}
+
+.gba-hp-track {
+  background: rgb(var(--gba-edge));
+  border-radius: 3px;
+  padding: 2px;
+}
+
+.gba-dialog {
+  background: rgb(var(--gba-dialog));
+  border: 3px solid rgb(var(--gba-dialog-edge));
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 3px rgb(var(--gba-dialog)),
+    inset 0 0 0 2px rgb(0 0 0 / 0.35),
+    0 6px 0 -1px rgb(0 0 0 / 0.35);
+}
+
+.gba-slot {
+  /* Só a espessura: a cor vem das classes (border-highlight quando selecionado). */
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 10px 3px 10px 3px;
+  box-shadow: 2px 2px 0 rgb(0 0 0 / 0.35);
 }

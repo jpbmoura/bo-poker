@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Flag, Layers, Swords, X } from 'lucide-react';
+import { ArrowRight, CalendarClock, Flag, Layers, TrendingUp, Swords, X } from 'lucide-react';
 import { useReducedMotion } from 'framer-motion';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Confetti } from '../Confetti';
+import { CountUpValue } from '../CountUpValue';
 import { cn } from '../../utils/cn';
 import { ApiError } from '../../services/api';
 import {
@@ -13,15 +14,19 @@ import {
   startBattle,
   type Battle,
   type BattleEvent,
+  type Side,
 } from '../../services/battle';
 import type { DailyCapture } from '../../services/capture';
 import type { Pokemon } from '../../types';
 import { useCaptureStore } from '../../store/useCaptureStore';
 import { useTrainerStore } from '../../store/useTrainerStore';
-import { FighterPanel } from './FighterPanel';
+import { BattleScene, type SceneFx } from './BattleScene';
+import { DialogBox } from './DialogBox';
+import type { SpriteFx } from './FighterPanel';
 import { MoveCard } from './MoveCard';
 import { PokemonPicker } from './PokemonPicker';
 import { eventText } from './labels';
+import { CHAR_MS } from './useTypewriter';
 
 interface BattleModalProps {
   open: boolean;
@@ -31,14 +36,14 @@ interface BattleModalProps {
 
 const ERRORS: Record<string, string> = {
   BATTLE_USED: 'Você já batalhou hoje.',
-  NOT_AVAILABLE: 'Este Pokémon não está mais disponível para captura.',
+  NOT_AVAILABLE: 'Este Pokémon não está mais disponível.',
   INVALID_POKEMON: 'Esse Pokémon não está na sua coleção.',
   NO_ACTIVE_BATTLE: 'A batalha já terminou.',
   NO_BATTLE: 'Nenhuma batalha em andamento.',
-  INVALID_CARD: 'Essa carta não está mais na sua mão.',
+  INVALID_CARD: 'Essa carta não está mais na mão.',
   BATTLE_OVER: 'A batalha já terminou.',
-  DAY_CHANGED: 'O dia virou! Um novo Pokémon apareceu.',
-  DB_UNAVAILABLE: 'O servidor não respondeu. Tente de novo em instantes.',
+  DAY_CHANGED: 'O dia virou. Já tem outro Pokémon.',
+  DB_UNAVAILABLE: 'O servidor não respondeu. Tente de novo.',
 };
 
 const errorText = (err: unknown) =>
@@ -46,12 +51,41 @@ const errorText = (err: unknown) =>
 
 const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
 
-/** Quanto cada evento fica na tela. O golpe em si respira mais que o resto. */
-function stepMs(e: BattleEvent, reduced: boolean): number {
+/**
+ * Quanto cada evento fica na tela. O golpe em si respira mais que o resto, e
+ * nenhuma frase é cortada antes de terminar de ser digitada.
+ */
+function stepMs(e: BattleEvent, reduced: boolean, text: string | null): number {
   if (reduced) return 150;
-  if (e.kind === 'move') return 520;
-  if (e.kind === 'faint') return 700;
-  return 420;
+  const base = e.kind === 'move' ? 560 : e.kind === 'faint' ? 760 : 460;
+  return Math.max(base, text ? text.length * CHAR_MS + 320 : 0);
+}
+
+/** Leque da mão: as das pontas inclinam, a do meio fica um pouco acima. */
+const FAN = [
+  { rotate: -4, lift: 6 },
+  { rotate: 0, lift: 0 },
+  { rotate: 4, lift: 6 },
+];
+
+/** Montinho de cartas do rodapé. */
+function Pile({ count, label }: { count: number; label: string }) {
+  return (
+    <span className="flex items-center gap-2" title={`${label}: ${count}`}>
+      <span aria-hidden className="relative w-4 h-5">
+        {count > 1 && <span className="absolute inset-0 translate-x-[3px] -translate-y-[3px] rounded-[3px] border border-border-strong bg-surface-3" />}
+        <span
+          className={cn(
+            'absolute inset-0 rounded-[3px] border',
+            count > 0 ? 'border-border-strong bg-surface-4' : 'border-dashed border-border bg-transparent',
+          )}
+        />
+      </span>
+      <span className="font-pixel text-xs text-muted">
+        {label} <span className="text-text tabular-nums">{count}</span>
+      </span>
+    </span>
+  );
 }
 
 /** Aplica um evento na cópia exibida: HP, status e estágios mudam no ritmo do log. */
@@ -112,10 +146,12 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
   const [stage, setStage] = useState<Stage>('pick');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [battle, setBattle] = useState<Battle | null>(null);
-  const [log, setLog] = useState<string[]>([]);
+  const [message, setMessage] = useState('');
   const [playing, setPlaying] = useState(false);
   const [playedUid, setPlayedUid] = useState<string | null>(null);
-  const [hits, setHits] = useState({ player: 0, wild: 0 });
+  const [fx, setFx] = useState<Record<Side, SpriteFx | null>>({ player: null, wild: null });
+  const [sceneFx, setSceneFx] = useState<SceneFx | null>(null);
+  const fxCount = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [confirmForfeit, setConfirmForfeit] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -134,7 +170,9 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
     setError(null);
     setResult(null);
     setConfirmForfeit(false);
-    setLog([]);
+    setMessage('');
+    setFx({ player: null, wild: null });
+    setSceneFx(null);
     if (capture.battle.status === 'active') {
       setStage('loading');
       getBattle()
@@ -142,7 +180,7 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
           if (!alive.current) return;
           setBattle(b);
           setStage('fight');
-          setLog(['A batalha continua!']);
+          setMessage(`O que ${b.player.name} vai fazer?`);
         })
         .catch((err) => {
           if (!alive.current) return;
@@ -169,7 +207,7 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
       const b = await startBattle(capture.day, selectedId);
       if (!alive.current) return;
       setBattle(b);
-      setLog([`Um ${b.wild.name} selvagem quer lutar! Vai, ${b.player.name}!`]);
+      setMessage(`Um ${b.wild.name} selvagem apareceu! Vai, ${b.player.name}!`);
       setStage('fight');
       void reloadCapture();
     } catch (err) {
@@ -191,16 +229,22 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
       if (!alive.current) return;
 
       const names = { player: battle.player.name, wild: battle.wild.name };
+      const spriteFx = (side: Side, kind: SpriteFx['kind']) =>
+        setFx((f) => ({ ...f, [side]: { kind, n: ++fxCount.current } }));
       let view = battle;
       for (const e of res.events) {
         view = applyEvent(view, e);
         setBattle(view);
         const text = eventText(e, names);
-        if (text) setLog((l) => [...l.slice(-5), text]);
+        if (text) setMessage(text);
+        if (e.kind === 'move') spriteFx(e.side, 'lunge');
         if ((e.kind === 'damage' || e.kind === 'selfHit' || e.kind === 'residual') && e.amount > 0) {
-          setHits((h) => ({ ...h, [e.side]: h[e.side] + 1 }));
+          spriteFx(e.side, 'hit');
         }
-        await sleep(stepMs(e, reduced));
+        if (e.kind === 'damage' && e.amount > 0 && (e.crit || e.effectiveness > 1)) {
+          setSceneFx({ kind: e.crit ? 'shake' : 'flash', n: ++fxCount.current });
+        }
+        await sleep(stepMs(e, reduced, text));
         if (!alive.current) return;
       }
 
@@ -208,7 +252,9 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
       setBattle(res.battle);
       if (res.trainer) applyTrainer(res.trainer);
       if (res.capture) setCapture(res.capture);
-      if (res.battle.status !== 'active') {
+      if (res.battle.status === 'active') {
+        setMessage(`O que ${res.battle.player.name} vai fazer?`);
+      } else {
         await sleep(reduced ? 200 : 600);
         if (!alive.current) return;
         setResult({
@@ -218,6 +264,7 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
           chance: res.capture?.chance ?? capture.chance,
           evolution: res.evolution ?? null,
         });
+        setMessage(res.battle.status === 'won' ? 'Você venceu!' : 'Você perdeu.');
         setStage('result');
       }
     } catch (err) {
@@ -247,6 +294,7 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
       setBattle(res.battle);
       setCapture(res.capture);
       setResult({ outcome: 'lost', bonus: 0, xp: 0, chance: res.capture.chance, evolution: null });
+      setMessage('Você fugiu.');
       setStage('result');
     } catch (err) {
       if (alive.current) setError(errorText(err));
@@ -257,6 +305,8 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
       }
     }
   };
+
+  const selectedOption = capture.battle.fighters.find((o) => o.pokemonId === selectedId);
 
   // Fechar com a batalha em andamento não perde nada: ela fica salva no servidor.
   const canClose = !playing && stage !== 'loading';
@@ -269,17 +319,10 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
         dismissable={canClose}
         className="max-w-2xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden"
       >
-        <div className="flex items-center justify-between px-5 h-14 border-b border-border shrink-0">
+        <div className="flex items-center justify-between px-5 h-12 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <Swords size={16} className="text-highlight" />
-            <div>
-              <h2 className="text-sm font-semibold text-text">Batalha</h2>
-              <p className="text-[11px] text-subtle">
-                {stage === 'fight' && battle
-                  ? `Turno ${battle.turn} de ${battle.maxTurns}`
-                  : 'Vença para aumentar a chance de captura.'}
-              </p>
-            </div>
+            <h2 className="font-pixel text-base font-semibold text-text leading-none">Batalha</h2>
           </div>
           <button
             onClick={onClose}
@@ -292,19 +335,54 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="battle-scope flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-5">
           {stage === 'pick' && (
             <div className="space-y-4">
-              <div className="rounded-xl border border-border bg-surface-2 p-3 text-xs text-muted leading-relaxed">
-                Cada golpe do seu Pokémon vira uma carta. Você tem 3 na mão: jogue uma por turno e compre
-                outra. Vencer soma de <strong className="text-text">+20</strong> a{' '}
-                <strong className="text-text">+50 pontos</strong> na chance de captura (quanto mais HP sobrar,
-                mais pontos) e dá XP para quem lutou. Perder não gasta Pokébola, mas só dá para batalhar uma
-                vez por dia.
+              {/* Quem está do outro lado: contexto para a escolha. */}
+              <div className="flex items-center gap-3">
+                <img
+                  src={capture.species.sprite}
+                  alt=""
+                  className="w-16 h-16 object-contain [image-rendering:pixelated] shrink-0"
+                  draggable={false}
+                />
+                <div className="font-pixel min-w-0">
+                  <p className="text-xs text-muted leading-none">Adversário</p>
+                  <p className="mt-1 text-xl font-semibold text-text leading-tight truncate">
+                    {capture.species.name}
+                    {selectedOption && (
+                      <span className="ml-2 text-sm font-normal text-muted">
+                        <span className="text-[10px]">Nv</span>
+                        {selectedOption.wildLevel}
+                      </span>
+                    )}
+                  </p>
+                </div>
               </div>
 
+              <ul className="grid grid-cols-3 gap-2 font-pixel text-[11px] sm:text-xs leading-tight text-muted">
+                <li className="flex items-start gap-1.5">
+                  <Layers size={13} className="shrink-0 mt-px text-text" />
+                  <span>
+                    Jogue <span className="text-text">1 carta</span> por turno
+                  </span>
+                </li>
+                <li className="flex items-start gap-1.5" title="Quanto mais HP sobrar, maior o bônus">
+                  <TrendingUp size={13} className="shrink-0 mt-px text-success" />
+                  <span>
+                    Vitória: <span className="text-text">+20 a +50%</span> na captura
+                  </span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <CalendarClock size={13} className="shrink-0 mt-px text-highlight" />
+                  <span>
+                    <span className="text-text">1 por dia</span>. Não gasta Pokébola
+                  </span>
+                </li>
+              </ul>
+
               <div>
-                <p className="text-xs font-medium text-muted mb-2">Quem vai lutar contra {capture.species.name}?</p>
+                <p className="font-pixel text-sm text-text mb-2">Quem vai lutar?</p>
                 {collection && collection.pokemon.length > 0 ? (
                   <PokemonPicker
                     pokemon={collection.pokemon}
@@ -313,7 +391,7 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
                     onSelect={setSelectedId}
                   />
                 ) : (
-                  <p className="text-xs text-subtle">Você ainda não tem Pokémon para lutar.</p>
+                  <p className="text-xs text-subtle">Você ainda não tem Pokémon.</p>
                 )}
               </div>
 
@@ -322,150 +400,155 @@ export function BattleModal({ open, onClose, capture }: BattleModalProps) {
               <Button
                 variant="solid"
                 size="lg"
-                className="w-full press-down"
+                className="w-full press-down font-pixel text-base"
                 disabled={!selectedId}
                 onClick={() => void handleStart()}
               >
                 <Swords size={16} />
-                Começar batalha
+                Lutar
               </Button>
             </div>
           )}
 
           {stage === 'loading' && (
-            <div className="h-64 flex items-center justify-center text-xs text-subtle">Preparando a arena…</div>
-          )}
-
-          {stage === 'fight' && battle && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-border bg-gradient-to-b from-surface-2 to-surface p-3 sm:p-4 space-y-3">
-                <FighterPanel
-                  fighter={battle.wild}
-                  side="wild"
-                  hitKey={hits.wild}
-                  fainted={battle.wild.hp === 0}
-                  reduced={reduced}
-                />
-                <FighterPanel
-                  fighter={battle.player}
-                  side="player"
-                  hitKey={hits.player}
-                  fainted={battle.player.hp === 0}
-                  reduced={reduced}
-                />
-              </div>
-
-              <div
-                className="rounded-lg bg-surface-2 border border-border px-3 py-2 h-[4.5rem] overflow-hidden flex flex-col justify-end"
-                aria-live="polite"
-              >
-                {log.slice(-3).map((line, i, arr) => (
-                  <p
-                    key={`${log.length}-${i}`}
-                    className={cn(
-                      'text-xs leading-5 truncate',
-                      i === arr.length - 1 ? 'text-text' : 'text-subtle',
-                    )}
-                  >
-                    {line}
-                  </p>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                {battle.hand.map((card) => (
+            // Faixas pretas fechando a tela: a transição clássica antes da luta.
+            <div
+              className="relative aspect-[16/11] sm:aspect-[16/10] rounded-lg overflow-hidden border-2 border-black/60 bg-surface"
+              aria-label="Preparando a batalha"
+              role="status"
+            >
+              {!reduced &&
+                Array.from({ length: 8 }, (_, i) => (
                   <div
-                    key={card.uid}
+                    key={i}
                     className={cn(
-                      'transition-[opacity,transform] duration-base ease-out-expo',
-                      playedUid === card.uid && 'opacity-0 -translate-y-6',
+                      'absolute inset-x-0 h-[12.5%] bg-black animate-stripe-in',
+                      i % 2 ? 'origin-right' : 'origin-left',
                     )}
-                  >
-                    <MoveCard
-                      move={card.move}
-                      disabled={playing || battle.status !== 'active'}
-                      onPlay={() => void handlePlay(card.uid)}
-                    />
-                  </div>
+                    style={{ top: `${i * 12.5}%`, animationDelay: `${i * 45}ms` }}
+                  />
                 ))}
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-subtle">
-                <span className="flex items-center gap-1.5 font-mono">
-                  <Layers size={12} />
-                  Deck {battle.deckCount} · Descarte {battle.discardCount}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void handleForfeit()}
-                  disabled={playing}
-                  className={cn(
-                    'flex items-center gap-1 transition-colors disabled:opacity-40',
-                    confirmForfeit ? 'text-danger font-semibold' : 'hover:text-danger',
-                  )}
-                >
-                  <Flag size={12} />
-                  {confirmForfeit ? 'Confirmar: desistir' : 'Desistir'}
-                </button>
-              </div>
-
-              {error && <p className="text-sm text-danger text-center animate-fade-in">{error}</p>}
             </div>
           )}
 
-          {stage === 'result' && result && (
-            <div className="py-4 text-center space-y-4 animate-fade-up">
-              {result.outcome === 'won' ? (
+          {(stage === 'fight' || stage === 'result') && battle && (
+            <div className="space-y-3">
+              <BattleScene
+                battle={battle}
+                fx={fx}
+                sceneFx={sceneFx}
+                reduced={reduced}
+                dimmed={stage === 'result' && result?.outcome === 'lost'}
+              />
+
+              <DialogBox message={message} instant={reduced} waiting={stage === 'fight' && !playing} />
+
+              {stage === 'fight' && (
                 <>
-                  <p className="text-2xl font-semibold text-text tracking-tight">Vitória!</p>
-                  <div className="flex justify-center gap-3">
-                    <div className="rounded-xl border border-success/30 bg-success-soft px-4 py-3">
-                      <p className="text-2xl font-semibold font-mono text-success">+{result.bonus}</p>
-                      <p className="text-[11px] text-muted">pontos na captura</p>
-                    </div>
-                    {result.xp > 0 && (
-                      <div className="rounded-xl border border-highlight/30 bg-highlight-soft px-4 py-3">
-                        <p className="text-2xl font-semibold font-mono text-highlight">+{result.xp}</p>
-                        <p className="text-[11px] text-muted">XP para {battle?.player.name}</p>
-                      </div>
-                    )}
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-2 px-1">
+                    {battle.hand.map((card, i) => {
+                      const fan = FAN[i] ?? FAN[1];
+                      return (
+                        <div
+                          key={card.uid}
+                          className="transition-transform duration-base ease-out-expo hover:![transform:none]"
+                          style={{ transform: `rotate(${fan.rotate}deg) translateY(${fan.lift}px)` }}
+                        >
+                          {/* Entrada e jogada em camadas separadas: o `fill` da entrada prenderia o transform. */}
+                          <div className={cn(!reduced && 'animate-fade-up')} style={{ animationDelay: `${i * 70}ms` }}>
+                            <div
+                              className={cn(
+                                'transition-[opacity,transform] duration-slow ease-out-expo',
+                                playedUid === card.uid && '-translate-y-24 scale-75 opacity-0',
+                              )}
+                            >
+                              <MoveCard
+                                move={card.move}
+                                disabled={playing || battle.status !== 'active'}
+                                onPlay={() => void handlePlay(card.uid)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <p className="text-sm text-muted">
-                    Agora cada Pokébola tem <strong className="text-text">{result.chance}%</strong> de chance.
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-4">
+                      <Pile count={battle.deckCount} label="Deck" />
+                      <Pile count={battle.discardCount} label="Descarte" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleForfeit()}
+                      disabled={playing}
+                      className={cn(
+                        'flex items-center gap-1 font-pixel text-xs transition-colors disabled:opacity-40',
+                        confirmForfeit ? 'text-danger font-semibold' : 'text-subtle hover:text-danger',
+                      )}
+                    >
+                      <Flag size={12} />
+                      {confirmForfeit ? 'Fugir mesmo?' : 'Fugir'}
+                    </button>
+                  </div>
+
+                  {error && <p className="text-sm text-danger text-center animate-fade-in">{error}</p>}
+                </>
+              )}
+
+              {stage === 'result' && result && (
+                <div className="space-y-3 pt-1 animate-fade-up">
+                  {result.outcome === 'won' && (
+                    <div className="gba-hud px-4 py-3 font-pixel">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-sm">Bônus de captura</span>
+                        <span className="text-xl font-semibold text-[#2F8A47] tabular-nums">
+                          +<CountUpValue value={String(result.bonus)} active delayMs={400} durationMs={700} />%
+                        </span>
+                      </div>
+                      {result.xp > 0 && (
+                        <div className="mt-1 flex items-baseline justify-between gap-3">
+                          <span className="text-sm">XP de {battle.player.name}</span>
+                          <span className="text-xl font-semibold text-[#B7791F] tabular-nums">
+                            +<CountUpValue value={String(result.xp)} active delayMs={700} durationMs={700} />
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="font-pixel text-sm text-muted text-center">
+                    Chance por Pokébola: <span className="text-text">{result.chance}%</span>
                   </p>
+
                   {result.evolution && (
-                    <div className="mx-auto max-w-xs rounded-xl border border-border bg-surface-2 p-3">
-                      <p className="text-xs text-muted">A batalha rendeu uma evolução!</p>
-                      <div className="mt-2 flex items-center justify-center gap-3">
+                    <div className="gba-hud mx-auto max-w-xs px-3 py-2.5 text-center font-pixel">
+                      <p className="text-xs opacity-70">Evolução</p>
+                      <div className="mt-1 flex items-center justify-center gap-3">
                         <img
                           src={result.evolution.from.sprite}
                           alt={result.evolution.from.name}
                           className="w-16 h-16 [image-rendering:pixelated]"
                         />
-                        <ArrowRight size={16} className="text-subtle" />
+                        <ArrowRight size={16} className="opacity-60" />
                         <img
                           src={result.evolution.to.sprite}
                           alt={result.evolution.to.name}
                           className="w-16 h-16 [image-rendering:pixelated]"
                         />
                       </div>
-                      <p className="mt-1 text-sm font-semibold text-text">
+                      <p className="text-sm font-semibold">
                         {result.evolution.from.name} evoluiu para {result.evolution.to.name}!
                       </p>
                     </div>
                   )}
-                </>
-              ) : (
-                <>
-                  <p className="text-2xl font-semibold text-text tracking-tight">Derrota</p>
-                  <p className="text-sm text-muted">
-                    Suas Pokébolas continuam com {result.chance}% de chance. Tente a sorte mesmo assim!
-                  </p>
-                </>
+
+                  <Button variant="solid" size="lg" className="w-full press-down font-pixel text-base" onClick={onClose}>
+                    Voltar à captura
+                  </Button>
+                </div>
               )}
-              <Button variant="solid" size="lg" className="press-down" onClick={onClose}>
-                Voltar à captura
-              </Button>
             </div>
           )}
         </div>
