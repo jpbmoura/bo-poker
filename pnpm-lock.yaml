@@ -17,15 +17,12 @@ importers:
 
   client:
     dependencies:
-      '@fontsource/inter':
-        specifier: ^5.1.0
-        version: 5.2.8
+      '@fontsource/geist-pixel':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/jetbrains-mono':
         specifier: ^5.2.8
         version: 5.2.8
-      '@fontsource/pixelify-sans':
-        specifier: ^5.3.0
-        version: 5.3.0
       better-auth:
         specifier: ^1.7.2
         version: 1.7.2(pg@8.23.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -599,14 +596,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@fontsource/inter@5.2.8':
-    resolution: {integrity: sha512-P6r5WnJoKiNVV+zvW2xM13gNdFhAEpQ9dQJHt3naLvfg+LkF2ldgSLiF4T41lf1SQCM9QmkqPTn4TH568IRagg==}
+  '@fontsource/geist-pixel@5.3.0':
+    resolution: {integrity: sha512-lno6MaxiPlE8ex9T8GMXvU9ZzGBdt1GSQ7ub00RMrhd7SUs9Qy/L6f3sLwzs1F7YcwAZiIa8pxW5dIqZz3zgCg==}
 
   '@fontsource/jetbrains-mono@5.2.8':
     resolution: {integrity: sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ==}
-
-  '@fontsource/pixelify-sans@5.3.0':
-    resolution: {integrity: sha512-4RCe9nXbi7wUu5+H0FNX1sgPZ2kJ1MmY1uTkEfvQIzzqhoS8zGKJaJfdK8oreE0OU+5gM+NdurFi3H3FJRBvyw==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -2265,11 +2259,9 @@ snapshots:
   '@esbuild/win32-x64@0.27.7':
     optional: true
 
-  '@fontsource/inter@5.2.8': {}
+  '@fontsource/geist-pixel@5.3.0': {}
 
   '@fontsource/jetbrains-mono@5.2.8': {}
-
-  '@fontsource/pixelify-sans@5.3.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
