@@ -1,11 +1,31 @@
 import { randomInt } from 'node:crypto';
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import type { Server } from 'socket.io';
 import { CAPTURE_ATTEMPTS, CAPTURE_CHANCE, spriteUrl, type Tier } from '../data/pokedex.js';
 import { config } from '../config.js';
 import * as captureStore from '../capture/captureStore.js';
 import { dayKey, isDayKey, nextReset, spawnFor } from '../capture/dailySpawn.js';
-import { TrainerCache } from '../trainers/index.js';
+import {
+  BATTLE_XP,
+  battleBonus,
+  captureChance,
+  playerLevel,
+  wildLevel,
+} from '../battle/balance.js';
+import * as battleStore from '../battle/battleStore.js';
+import {
+  BattleError,
+  createBattle,
+  forfeit,
+  hpRatio,
+  playCard,
+  type BattleEvent,
+} from '../battle/engine.js';
+import { speciesData } from '../battle/deck.js';
+import { effectiveness } from '../battle/typeChart.js';
+import type { TypeName } from '../battle/types.js';
+import { battleDTO, type BattleDTO } from '../battle/view.js';
+import { TrainerCache, formAt, isPendingChoice, liveStage } from '../trainers/index.js';
 import type { Pokemon } from '../types/index.js';
 import { dbError, requireUser, type AuthedRequest } from './session.js';
 import { refreshTrainerRooms, trainerDTO, type TrainerDTO } from './trainerView.js';
@@ -25,13 +45,47 @@ interface CaptureDTO {
   lineId: string;
   stage: number;
   tier: Tier;
-  /** Chance (%) de cada tentativa. */
+  /** Chance (%) do tier, sem o bônus da batalha. */
+  baseChance: number;
+  /** Chance (%) de cada tentativa, já com o bônus (teto em MAX_CAPTURE_CHANCE). */
   chance: number;
+  battle: BattleSummary;
   attempts: number;
   maxAttempts: number;
   status: CaptureStatus;
   /** ISO do instante em que aparece o próximo. */
   resetsAt: string;
+}
+
+/** Um Pokémon da coleção visto como lutador contra o selvagem de hoje. */
+interface FighterOption {
+  pokemonId: string;
+  level: number;
+  types: TypeName[];
+  /** Nível que o selvagem teria contra ele. */
+  wildLevel: number;
+  /** Melhor multiplicador dos tipos dele contra o selvagem (2 = vantagem). */
+  attack: number;
+  /** Melhor multiplicador dos tipos do selvagem contra ele (2 = risco). */
+  defense: number;
+}
+
+/** `none` = ainda não batalhou hoje. */
+interface BattleSummary {
+  status: 'none' | battleStore.BattleStatus;
+  bonus: number;
+  wildTypes: TypeName[];
+  /** Para o seletor: o cliente não tem tipos nem a fórmula de nível. */
+  fighters: FighterOption[];
+}
+
+interface PlayDTO {
+  battle: BattleDTO;
+  events: BattleEvent[];
+  /** Só quando a batalha acabou neste turno. */
+  capture?: CaptureDTO;
+  trainer?: TrainerDTO;
+  evolution?: { from: Pokemon; to: Pokemon } | null;
 }
 
 interface AttemptDTO {
@@ -60,24 +114,66 @@ export function createCaptureRouter(io: Server): Router {
   async function buildCapture(userId: string, now: Date): Promise<CaptureDTO> {
     const day = dayKey(now);
     const species = spawnFor(day, config.captureSalt);
-    const [record, state] = await Promise.all([
+    const [record, state, battle] = await Promise.all([
       captureStore.getDay(userId, day),
       TrainerCache.peek(userId) ?? TrainerCache.resolve(userId),
+      battleStore.getDay(userId, day),
     ]);
     const attempts = record?.attempts ?? 0;
     const ownsLine = state.pokemon.some((p) => p.lineId === species.lineId);
+    const baseChance = CAPTURE_CHANCE[species.tier];
+    const bonus = battle?.status === 'won' ? battle.bonus : 0;
+    const wildTypes = speciesData(species.entry.id).types;
+    const best = (attackers: TypeName[], defenders: TypeName[]) =>
+      Math.max(...attackers.map((t) => effectiveness(t, defenders)));
+    const fighters: FighterOption[] = state.pokemon.flatMap((p) => {
+      const form = formAt(p, liveStage(p), p.branchId);
+      if (!form) return [];
+      const types = speciesData(form.id).types;
+      const level = playerLevel(p.xp);
+      return [
+        {
+          pokemonId: p.id,
+          level,
+          types,
+          wildLevel: wildLevel(species.tier, level),
+          attack: best(types, wildTypes),
+          defense: best(wildTypes, types),
+        },
+      ];
+    });
     return {
       day,
       species: { id: species.entry.id, name: species.entry.name, sprite: spriteUrl(species.entry.id) },
       lineId: species.lineId,
       stage: species.stage,
       tier: species.tier,
-      chance: CAPTURE_CHANCE[species.tier],
+      baseChance,
+      chance: captureChance(baseChance, bonus),
+      battle: { status: battle?.status ?? 'none', bonus, wildTypes, fighters },
       attempts,
       maxAttempts: CAPTURE_ATTEMPTS,
       status: statusOf(attempts, record?.caught ?? false, ownsLine),
       resetsAt: nextReset(now).toISOString(),
     };
+  }
+
+  /**
+   * O body leva o `day` que o cliente está mostrando: se o dia virou com o
+   * drawer ou o modal aberto, a ação NÃO pode cair no Pokémon de amanhã sem a
+   * pessoa ver. Null = já respondeu o erro.
+   */
+  function requestDay(req: AuthedRequest, res: Response, now: Date): string | null {
+    const day = dayKey(now);
+    if (!isDayKey(req.body?.day)) {
+      res.status(400).json({ error: 'INVALID_DAY' });
+      return null;
+    }
+    if (req.body.day !== day) {
+      res.status(409).json({ error: 'DAY_CHANGED' });
+      return null;
+    }
+    return day;
   }
 
   router.get('/today', async (req: AuthedRequest, res) => {
@@ -98,22 +194,19 @@ export function createCaptureRouter(io: Server): Router {
   router.post('/today/attempt', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const now = new Date();
-    const day = dayKey(now);
-    if (!isDayKey(req.body?.day)) {
-      res.status(400).json({ error: 'INVALID_DAY' });
-      return;
-    }
-    if (req.body.day !== day) {
-      res.status(409).json({ error: 'DAY_CHANGED' });
-      return;
-    }
+    const day = requestDay(req, res, now);
+    if (!day) return;
 
     const species = spawnFor(day, config.captureSalt);
-    const chance = CAPTURE_CHANCE[species.tier];
-    const roll = (): boolean =>
-      config.captureForce ? config.captureForce === 'success' : randomInt(100) < chance;
 
     try {
+      // A batalha vencida é terminal: o bônus lido aqui não muda até o roll.
+      const battle = await battleStore.getDay(userId, day);
+      const bonus = battle?.status === 'won' ? battle.bonus : 0;
+      const chance = captureChance(CAPTURE_CHANCE[species.tier], bonus);
+      const roll = (): boolean =>
+        config.captureForce ? config.captureForce === 'success' : randomInt(100) < chance;
+
       // Garante o cache quente antes: o `put` do sucesso precisa da coleção
       // inteira em memória, não só do Pokémon novo.
       if (!TrainerCache.peek(userId)) await TrainerCache.resolve(userId);
@@ -142,6 +235,178 @@ export function createCaptureRouter(io: Server): Router {
       res.json(body);
     } catch (err) {
       dbError(res, err, captureTag, 'falha ao lançar a pokébola');
+    }
+  });
+
+  /** A batalha de hoje, para retomar depois de fechar o modal ou recarregar. */
+  router.get('/today/battle', async (req: AuthedRequest, res) => {
+    try {
+      const record = await battleStore.getDay(req.userId!, dayKey(new Date()));
+      if (!record) {
+        res.status(404).json({ error: 'NO_BATTLE' });
+        return;
+      }
+      res.json(battleDTO(record.state, record));
+    } catch (err) {
+      dbError(res, err, captureTag, 'falha ao ler a batalha');
+    }
+  });
+
+  /**
+   * Começa a batalha do dia com um Pokémon da coleção. Uma por dia, ganhando ou
+   * perdendo — quem garante é a chave primária do `daily_battle`.
+   */
+  router.post('/today/battle', async (req: AuthedRequest, res) => {
+    const userId = req.userId!;
+    const now = new Date();
+    const day = requestDay(req, res, now);
+    if (!day) return;
+    const pokemonId: unknown = req.body?.pokemonId;
+    if (typeof pokemonId !== 'string') {
+      res.status(400).json({ error: 'INVALID_POKEMON' });
+      return;
+    }
+
+    try {
+      const capture = await buildCapture(userId, now);
+      if (capture.battle.status !== 'none') {
+        res.status(409).json({ error: 'BATTLE_USED' });
+        return;
+      }
+      if (capture.status !== 'available') {
+        res.status(409).json({ error: 'NOT_AVAILABLE' });
+        return;
+      }
+      // O buildCapture já deixou o cache quente.
+      const mine = TrainerCache.peek(userId)?.pokemon.find((p) => p.id === pokemonId);
+      const form = mine ? formAt(mine, liveStage(mine), mine.branchId) : null;
+      if (!mine || !form) {
+        res.status(400).json({ error: 'INVALID_POKEMON' });
+        return;
+      }
+
+      const level = playerLevel(mine.xp);
+      const state = createBattle(
+        { dexId: form.id, name: form.name, level },
+        {
+          dexId: capture.species.id,
+          name: capture.species.name,
+          level: wildLevel(capture.tier, level),
+        },
+        randomInt(2 ** 31),
+      );
+      const record = await battleStore.start(userId, day, mine.id, state);
+      if (!record) {
+        res.status(409).json({ error: 'BATTLE_USED' });
+        return;
+      }
+      res.json(battleDTO(record.state, record));
+    } catch (err) {
+      dbError(res, err, captureTag, 'falha ao começar a batalha');
+    }
+  });
+
+  /**
+   * Fim de batalha: credita o XP em quem lutou e devolve a captura (com o bônus)
+   * e a coleção atualizadas. O XP vai pelo cache, como o da rodada: crédito em
+   * memória agora, gravação no próximo flush.
+   */
+  function settleBattle(
+    userId: string,
+    pokemonId: string | null,
+    xp: number,
+  ): { from: Pokemon; to: Pokemon } | null {
+    if (!pokemonId || xp === 0) return null;
+    const applied = TrainerCache.applyXp(userId, xp, pokemonId);
+    if (!applied) return null;
+
+    const beforeStage = liveStage(applied.before);
+    const afterStage = liveStage(applied.after);
+    let evolution: { from: Pokemon; to: Pokemon } | null = null;
+    // Mesma regra do award da rodada: ramificado pendente não evolui sozinho.
+    if (afterStage > beforeStage && !isPendingChoice(applied.after)) {
+      const from = formAt(applied.before, beforeStage, applied.before.branchId);
+      const to = formAt(applied.after, afterStage, applied.after.branchId);
+      if (from && to) evolution = { from, to };
+    }
+    if (applied.after.isActive) refreshTrainerRooms(io, userId, evolution ?? undefined);
+    return evolution;
+  }
+
+  router.post('/today/battle/play', async (req: AuthedRequest, res) => {
+    const userId = req.userId!;
+    const now = new Date();
+    const day = requestDay(req, res, now);
+    if (!day) return;
+    const cardUid: unknown = req.body?.cardUid;
+    if (typeof cardUid !== 'string') {
+      res.status(400).json({ error: 'INVALID_CARD' });
+      return;
+    }
+
+    try {
+      // O tier sai do Pokémon do dia, não do estado: é ele quem define o XP.
+      const tier = spawnFor(day, config.captureSalt).tier;
+      if (!TrainerCache.peek(userId)) await TrainerCache.resolve(userId);
+
+      const outcome = await battleStore.turn(userId, day, (record) => {
+        const { state, events } = playCard(record.state, cardUid);
+        if (state.outcome === 'active') return { state, result: events };
+        const won = state.outcome === 'won';
+        return {
+          state,
+          result: events,
+          finish: {
+            status: state.outcome,
+            bonus: won ? battleBonus(hpRatio(state)) : 0,
+            xpGained: won && record.pokemonId ? BATTLE_XP[tier] : 0,
+          },
+        };
+      });
+      if (!outcome) {
+        res.status(409).json({ error: 'NO_ACTIVE_BATTLE' });
+        return;
+      }
+
+      const { record, result: events } = outcome;
+      const body: PlayDTO = { battle: battleDTO(record.state, record), events };
+      if (record.status !== 'active') {
+        body.evolution = settleBattle(userId, record.pokemonId, record.xpGained);
+        body.capture = await buildCapture(userId, now);
+        body.trainer = trainerDTO(userId);
+      }
+      res.json(body);
+    } catch (err) {
+      if (err instanceof BattleError) {
+        res.status(409).json({ error: err.code });
+        return;
+      }
+      dbError(res, err, captureTag, 'falha ao jogar a carta');
+    }
+  });
+
+  router.post('/today/battle/forfeit', async (req: AuthedRequest, res) => {
+    const userId = req.userId!;
+    const now = new Date();
+    const day = requestDay(req, res, now);
+    if (!day) return;
+
+    try {
+      const outcome = await battleStore.turn(userId, day, (record) => ({
+        state: forfeit(record.state),
+        result: null,
+        finish: { status: 'lost', bonus: 0, xpGained: 0 },
+      }));
+      if (!outcome) {
+        res.status(409).json({ error: 'NO_ACTIVE_BATTLE' });
+        return;
+      }
+      res.json({
+        battle: battleDTO(outcome.record.state, outcome.record),
+        capture: await buildCapture(userId, now),
+      });
+    } catch (err) {
+      dbError(res, err, captureTag, 'falha ao desistir da batalha');
     }
   });
 

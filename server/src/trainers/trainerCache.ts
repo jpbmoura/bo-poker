@@ -94,20 +94,29 @@ export class TrainerCacheImpl {
   }
 
   /**
-   * Credita XP no ATIVO e devolve cópias de antes/depois, para o caller comparar
-   * estágios e detectar evolução. Null quando não há Pokémon a avançar — que é o
-   * caso de quem nunca escolheu e o da leitura degradada.
+   * Credita XP no ATIVO (ou em `pokemonId`, quando vem — a batalha da captura
+   * paga quem lutou) e devolve cópias de antes/depois, para o caller comparar
+   * estágios e detectar evolução. Null quando não há Pokémon a avançar — que é
+   * o caso de quem nunca escolheu, o da leitura degradada e o de um `pokemonId`
+   * que não está mais na coleção.
    */
-  applyXp(userId: string, delta: number): { before: PokemonState; after: PokemonState } | null {
+  applyXp(
+    userId: string,
+    delta: number,
+    pokemonId?: string,
+  ): { before: PokemonState; after: PokemonState } | null {
     const state = this.peek(userId);
     if (!state || delta === 0) return null;
-    const active = this.activePokemon(state);
-    if (!active) return null;
+    const target =
+      pokemonId === undefined
+        ? this.activePokemon(state)
+        : (state.pokemon.find((p) => p.id === pokemonId) ?? null);
+    if (!target) return null;
 
-    const before = { ...active };
-    active.xp += delta;
-    active.pendingXp += delta;
-    return { before, after: { ...active } };
+    const before = { ...target };
+    target.xp += delta;
+    target.pendingXp += delta;
+    return { before, after: { ...target } };
   }
 
   /** Reflete no cache um registro que o banco JÁ confirmou (create/branch/active). */

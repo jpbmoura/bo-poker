@@ -495,6 +495,64 @@ const playerOf = (client, playerId) =>
   const capStarter = ['charmander', 'squirtle'].find((l) => l !== today.body.lineId);
   await api('POST', '/api/trainer/pokemon', cookieCap, { lineId: capStarter });
 
+  // --- batalha antes da captura ---
+  const preBattle = await api('GET', '/api/capture/today', cookieCap);
+  expect(preBattle.body.battle.status === 'none' && preBattle.body.battle.bonus === 0,
+    'o dia comeca sem batalha e sem bonus');
+  expect(preBattle.body.chance === preBattle.body.baseChance, 'sem batalha, chance = chance do tier');
+  const fighter = preBattle.body.battle.fighters[0];
+  expect(preBattle.body.battle.fighters.length === 1 && fighter.level >= 20,
+    'o inicial aparece como lutador, com nivel');
+
+  const badFighter = await api('POST', '/api/capture/today/battle', cookieCap,
+    { day: today.body.day, pokemonId: 'nao-e-meu' });
+  expect(badFighter.status === 400 && badFighter.body.error === 'INVALID_POKEMON',
+    'lutar com Pokemon de fora da colecao e recusado');
+
+  const started = await api('POST', '/api/capture/today/battle', cookieCap,
+    { day: today.body.day, pokemonId: fighter.pokemonId });
+  expect(started.status === 200 && started.body.status === 'active', 'a batalha comeca ativa');
+  expect(started.body.hand.length === 3, 'com 3 cartas na mao');
+  expect(started.body.wild.name === today.body.species.name, 'contra o Pokemon do dia');
+  expect(!('hand' in started.body.wild) && started.body.wildHandCount === 3,
+    'a mao do selvagem nao vai para o cliente, so a contagem');
+
+  const again = await api('POST', '/api/capture/today/battle', cookieCap,
+    { day: today.body.day, pokemonId: fighter.pokemonId });
+  expect(again.status === 409 && again.body.error === 'BATTLE_USED', 'so uma batalha por dia');
+
+  const badCard = await api('POST', '/api/capture/today/battle/play', cookieCap,
+    { day: today.body.day, cardUid: 'nao-existe' });
+  expect(badCard.status === 409 && badCard.body.error === 'INVALID_CARD',
+    'carta fora da mao e recusada');
+
+  let fight = started.body;
+  let last;
+  for (let turn = 0; turn < 40 && fight.status === 'active'; turn++) {
+    last = await api('POST', '/api/capture/today/battle/play', cookieCap,
+      { day: today.body.day, cardUid: fight.hand[0].uid });
+    if (last.status !== 200) break;
+    fight = last.body.battle;
+  }
+  expect(last?.status === 200 && fight.status !== 'active', `a batalha termina (${fight.status})`);
+  expect(last.body.events.at(-1)?.kind === 'end', 'o ultimo evento e o fim');
+  const afterBattle = last.body.capture;
+  if (fight.status === 'won') {
+    expect(fight.bonus >= 20 && fight.bonus <= 50, `vitoria da de 20 a 50 de bonus (${fight.bonus})`);
+    expect(afterBattle.chance === Math.min(95, afterBattle.baseChance + fight.bonus),
+      'a chance de captura soma o bonus, com teto de 95');
+    expect(fight.xpGained > 0, 'e XP para quem lutou');
+    const fought = last.body.trainer.pokemon.find((p) => p.id === fighter.pokemonId);
+    expect(fought.progress.xp === fight.xpGained, 'o XP entra na colecao na hora');
+  } else {
+    expect(fight.bonus === 0 && afterBattle.chance === afterBattle.baseChance,
+      'derrota nao mexe na chance');
+  }
+  const replay = await api('POST', '/api/capture/today/battle/play', cookieCap,
+    { day: today.body.day, cardUid: fight.hand[0]?.uid ?? 'x' });
+  expect(replay.status === 409 && replay.body.error === 'NO_ACTIVE_BATTLE',
+    'batalha encerrada nao aceita jogada');
+
   const staleDay = await api('POST', '/api/capture/today/attempt', cookieCap, { day: '2000-01-01' });
   expect(staleDay.status === 409 && staleDay.body.error === 'DAY_CHANGED',
     'tentativa de um dia que ja passou e recusada com DAY_CHANGED');

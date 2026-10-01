@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Clock, X } from 'lucide-react';
+import { Clock, Swords, X } from 'lucide-react';
 import { useReducedMotion } from 'framer-motion';
 import { Drawer } from '../ui/Drawer';
 import { Button } from '../ui/Button';
 import { Confetti } from '../Confetti';
+import { BattleModal } from '../battle/BattleModal';
 import { CaptureBall } from './CaptureBall';
 import { CaptureScene, REDUCED_MS, SCENE_MS, type ScenePhase } from './CaptureScene';
 import { TIER_STYLE } from './tierStyle';
@@ -61,6 +62,8 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
   const setCapture = useCaptureStore((s) => s.set);
   const reload = useCaptureStore((s) => s.load);
   const applyTrainer = useTrainerStore((s) => s.apply);
+  const hasPokemon = useTrainerStore((s) => (s.collection?.pokemon.length ?? 0) > 0);
+  const [battleOpen, setBattleOpen] = useState(false);
 
   // Reativo: mudar a preferência do sistema com o app aberto vale na hora.
   const reduced = useReducedMotion() ?? false;
@@ -81,6 +84,12 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
 
   const busy = phase !== 'idle';
   const canThrow = capture?.status === 'available' && !busy;
+  const battleStatus = capture?.battle.status ?? 'none';
+  const canBattle =
+    capture?.status === 'available' &&
+    (battleStatus === 'none' || battleStatus === 'active') &&
+    hasPokemon &&
+    !busy;
 
   const handleThrow = async () => {
     if (!capture || !canThrow) return;
@@ -163,7 +172,7 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
 
   return (
     <>
-      <Drawer open={open} onClose={busy ? () => {} : onClose} label="Captura do dia">
+      <Drawer open={open} onClose={busy || battleOpen ? () => {} : onClose} label="Captura do dia">
         <div className="flex items-center justify-between px-5 h-14 border-b border-border shrink-0">
           <div>
             <h2 className="text-sm font-semibold text-text">Pokémon selvagem</h2>
@@ -224,6 +233,11 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
                   {capture.chance}%
                 </span>
               </div>
+              {capture.battle.bonus > 0 && (
+                <p className="text-[11px] font-mono text-subtle text-right">
+                  {capture.baseChance}% + <span className="text-success">{capture.battle.bonus}</span> da batalha
+                </p>
+              )}
               <div className="mt-2 h-1.5 w-full rounded-full bg-surface-4 overflow-hidden">
                 <div
                   className={cn('h-full rounded-full bg-current transition-[width] duration-500', style.text)}
@@ -232,6 +246,7 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
               </div>
               <p className="mt-2 text-[11px] text-subtle">
                 Por tentativa. Quanto mais raro ou evoluído, mais difícil.
+                {battleStatus === 'lost' && ' Você perdeu a batalha de hoje.'}
               </p>
             </div>
 
@@ -255,6 +270,18 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
               >
                 {message.text}
               </p>
+            )}
+
+            {canBattle && (
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full press-down"
+                onClick={() => setBattleOpen(true)}
+              >
+                <Swords size={16} />
+                {battleStatus === 'active' ? 'Continuar batalha' : 'Batalhar antes de capturar'}
+              </Button>
             )}
 
             {capture.status === 'available' && (
@@ -307,6 +334,10 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
       </Drawer>
 
       <Confetti active={confetti} className="z-[60]" />
+
+      {capture && (
+        <BattleModal open={battleOpen} onClose={() => setBattleOpen(false)} capture={capture} />
+      )}
     </>
   );
 }

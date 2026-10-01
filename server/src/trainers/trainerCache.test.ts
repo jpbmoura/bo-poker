@@ -103,6 +103,19 @@ test('applyXp credita no ativo e devolve antes/depois', async () => {
   assert.equal(store.addCalls.length, 0, 'applyXp não pode esperar o banco');
 });
 
+test('applyXp com pokemonId credita nele, não no ativo', async () => {
+  const { store, cache } = setup();
+  store.rows = [row({ xp: 100 }), row({ id: 'pk2', lineId: 'squirtle', isActive: false, xp: 30 })];
+  await cache.resolve('u1');
+
+  const result = cache.applyXp('u1', 25, 'pk2');
+  assert.ok(result);
+  assert.equal(result.after.id, 'pk2');
+  assert.equal(result.after.xp, 55);
+  assert.equal(cache.peek('u1')?.pokemon[0].xp, 100, 'o ativo não muda');
+  assert.equal(cache.applyXp('u1', 25, 'nao-existe'), null);
+});
+
 test('applyXp devolve null sem Pokémon (nunca escolheu ou leitura degradada)', async () => {
   const { cache } = setup();
   await cache.resolve('u1');
