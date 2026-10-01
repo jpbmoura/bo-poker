@@ -31,7 +31,9 @@ export default function HomePage() {
   const location = useLocation();
   const { data: session } = useSession();
 
-  const { active } = useTrainer();
+  const { active, pokemon } = useTrainer();
+  // Ramo pendente (pedra do Eevee…) fora da mesa: só a coleção mostra a escolha.
+  const hasPendingChoice = pokemon.some((p) => p.progress.pendingChoice);
   const [trainerOpen, setTrainerOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const capture = useCaptureStore((s) => s.capture);
@@ -163,9 +165,15 @@ export default function HomePage() {
                 onClick={() => setTrainerOpen(true)}
                 title="Meus Pokémon"
                 aria-label="Meus Pokémon"
-                className="flex w-[150px] sm:w-[190px] px-2.5 py-1.5 rounded-lg hover:bg-surface-2 transition-colors"
+                className="relative flex w-[150px] sm:w-[190px] px-2.5 py-1.5 rounded-lg hover:bg-surface-2 transition-colors"
               >
                 <TrainerBadge pokemon={active} compact />
+                {hasPendingChoice && (
+                  <span
+                    className="absolute top-1 right-1 w-2 h-2 rounded-full bg-highlight animate-pulse"
+                    title="Um Pokémon está pronto para evoluir"
+                  />
+                )}
               </button>
               <div className="hidden sm:block text-right leading-tight">
                 <div className="text-xs text-muted truncate max-w-[160px]">

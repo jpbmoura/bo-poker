@@ -49,7 +49,7 @@ export default function RoomPage() {
   const navigate = useNavigate();
   const { connected } = useSocket();
   const { data: session } = useSession();
-  const { active: trainerActive } = useTrainer();
+  const { pokemon: trainerPokemon, status: trainerStatus, reload: reloadTrainer } = useTrainer();
   const userId = session?.user?.id ?? null;
 
   // Sem canonicalizar, /room/abc e /room/ABC eram salas diferentes.
@@ -236,9 +236,23 @@ export default function RoomPage() {
   }, [roundResult]);
 
   // O seletor de ramo (pedra do Eevee, Oddish, Wurmple…) é só do dono: a
-  // condição sai do progresso do PRÓPRIO jogador, nunca da mesa.
-  const needsBranch =
-    myPlayer?.progress?.pendingChoice === true && trainerActive !== null;
+  // condição sai do progresso do PRÓPRIO jogador, nunca da mesa. O Pokémon é o
+  // que o SERVIDOR marcou como pendente (`pokemonId`), não o ativo do store
+  // local — que pode estar defasado se o ativo mudou em outra aba.
+  const pendingId = myPlayer?.progress?.pendingChoice ? myPlayer.progress.pokemonId : null;
+  const pendingPokemon = pendingId
+    ? (trainerPokemon.find((p) => p.id === pendingId) ?? null)
+    : null;
+
+  // Pendente que a coleção local ainda não conhece: recarrega UMA vez por id,
+  // senão o seletor nunca apareceria até um F5.
+  const reloadedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingId || pendingPokemon || trainerStatus !== 'ready') return;
+    if (reloadedForRef.current === pendingId) return;
+    reloadedForRef.current = pendingId;
+    void reloadTrainer();
+  }, [pendingId, pendingPokemon, trainerStatus, reloadTrainer]);
 
   // O servidor manda o estado ja na perspectiva de quem recebe: cada jogador ve
   // o proprio voto sem mascara. Por isso nao existe mais estado local otimista
@@ -368,7 +382,7 @@ export default function RoomPage() {
       {/* Acima do Confetti (z-40) e do Dialog (z-50): ver EvolutionOverlay. */}
       <EvolutionOverlay />
 
-      {needsBranch && trainerActive && <BranchChoiceDialog pokemon={trainerActive} />}
+      {pendingPokemon && <BranchChoiceDialog pokemon={pendingPokemon} />}
 
       <SettingsDialog
         open={settingsOpen}

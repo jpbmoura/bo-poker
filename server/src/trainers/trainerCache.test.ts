@@ -181,6 +181,19 @@ test('put reflete um registro já confirmado e preserva o pendente', async () =>
   assert.equal(cache.peek('u1')?.pokemon[0].pendingXp, 9, 'o flush ainda não rodou');
 });
 
+test('put antes do flush mantém o XP da memória (Eevee escolhendo a pedra)', async () => {
+  const { store, cache } = setup();
+  store.rows = [row({ lineId: 'eevee', xp: 200, branchId: null })];
+  await cache.resolve('u1');
+  cache.applyXp('u1', 100);
+
+  // A linha que o setBranch devolve ainda não tem o delta pendente.
+  const next = cache.put('u1', row({ lineId: 'eevee', xp: 200, branchId: 134 }));
+  assert.equal(next.xp, 300);
+  assert.equal(next.branchId, 134);
+  assert.equal(next.pendingXp, 100);
+});
+
 test('put num usuário frio cria a coleção', async () => {
   const { cache } = setup();
   const state = cache.put('u9', row({ id: 'pk9', userId: 'u9' }));

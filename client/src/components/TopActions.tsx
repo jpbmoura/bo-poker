@@ -17,7 +17,8 @@ export function TopActions({ me, onSignOut }: TopActionsProps) {
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [trainerOpen, setTrainerOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
-  const { active } = useTrainer();
+  const { active, pokemon } = useTrainer();
+  const hasPendingChoice = pokemon.some((p) => p.progress.pendingChoice);
 
   useEffect(() => {
     if (!open) {
@@ -116,6 +117,9 @@ export function TopActions({ me, onSignOut }: TopActionsProps) {
             >
               <Sparkles size={13} />
               Meus Pokémon
+              {hasPendingChoice && (
+                <span className="ml-auto text-[10px] text-highlight">pronto para evoluir</span>
+              )}
             </button>
 
             {/* Dois cliques: sair da conta tira você da mesa e da sessão. */}

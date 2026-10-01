@@ -106,7 +106,11 @@ export function createTrainerRouter(io: Server): Router {
       const updated = TrainerCache.put(userId, row);
       const from = formAt(owned, liveStage(owned), null);
       const to = formAt(updated, liveStage(updated), updated.branchId);
-      refreshTrainerRooms(io, userId, from && to ? { from, to } : undefined);
+      // A animação é da MESA: só toca quando o escolhido é o que está sentado
+      // nela. Um Eevee da coleção evoluindo pela tela "Meus Pokémon" não pode
+      // animar a troca no lugar de outro Pokémon.
+      const evolution = updated.isActive && from && to ? { from, to } : undefined;
+      refreshTrainerRooms(io, userId, evolution);
       respondTrainer(res, userId);
     } catch (err) {
       dbError(res, err, trainerTag, 'falha ao escolher a evolução');

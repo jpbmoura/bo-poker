@@ -129,6 +129,10 @@ export class TrainerCacheImpl {
     } else {
       // Preserva o pendingXp: o flush ainda não rodou e o delta não pode sumir.
       next.pendingXp = state.pokemon[index].pendingXp;
+      // E o XP da MEMÓRIA, não o da linha: o banco ainda não tem o delta
+      // pendente. Sem isto um Eevee que cruzou o limiar e escolhe a pedra antes
+      // do flush voltaria ao estágio 0 — com a pedra gravada e sem evoluir.
+      next.xp = state.pokemon[index].xp;
       state.pokemon[index] = next;
     }
     if (next.isActive) {

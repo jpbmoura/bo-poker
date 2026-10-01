@@ -11,6 +11,11 @@ import type { TrainerPokemon } from '../services/trainer';
 interface BranchChoiceDialogProps {
   /** O Pokémon ativo, já sabido como pendente de escolha de ramo. */
   pokemon: TrainerPokemon;
+  /**
+   * Fora da mesa (tela "Meus Pokémon") a escolha pode ficar para depois. Sem
+   * isto o dialog é bloqueante, como na sala.
+   */
+  onClose?: () => void;
 }
 
 /**
@@ -21,7 +26,7 @@ interface BranchChoiceDialogProps {
  * A escolha é definitiva: por isso o texto avisa antes, e a confirmação é
  * explícita em vez de um clique só.
  */
-export function BranchChoiceDialog({ pokemon }: BranchChoiceDialogProps) {
+export function BranchChoiceDialog({ pokemon, onClose }: BranchChoiceDialogProps) {
   const line = findLine(pokemon.progress.lineId);
   const isEevee = line?.id === EEVEE_LINE_ID;
   const apply = useTrainerStore((s) => s.apply);
@@ -41,6 +46,7 @@ export function BranchChoiceDialog({ pokemon }: BranchChoiceDialogProps) {
     setError(null);
     try {
       apply(await chooseBranch(pokemon.id, pickedEntry.id));
+      onClose?.();
       // A animação chega pelo `pokemon:evolved` que o servidor difunde.
     } catch {
       setError('Não foi possível escolher agora. Tente de novo.');
@@ -49,7 +55,7 @@ export function BranchChoiceDialog({ pokemon }: BranchChoiceDialogProps) {
   };
 
   return (
-    <Dialog open className="max-w-md">
+    <Dialog open onClose={onClose} dismissable={!!onClose && !busy} className="max-w-md">
       <div className="p-6">
         <div className="flex items-center gap-3 mb-1">
           <motion.img
@@ -125,6 +131,18 @@ export function BranchChoiceDialog({ pokemon }: BranchChoiceDialogProps) {
                 ? 'Escolha uma pedra'
                 : 'Escolha a evolução'}
         </Button>
+
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full mt-2 text-subtle"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Depois
+          </Button>
+        )}
       </div>
     </Dialog>
   );
