@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formAt, isPendingChoice, liveStage, progressAt } from './species.js';
+import { duplicateTarget, formAt, isPendingChoice, liveStage, progressAt } from './species.js';
 import type { OwnedPokemon } from './species.js';
 
 const owned = (over: Partial<OwnedPokemon> = {}): OwnedPokemon => ({
@@ -88,4 +88,29 @@ test('linha linear nunca fica pendente', () => {
 test('linha desconhecida devolve null em vez de explodir', () => {
   assert.equal(formAt(owned({ lineId: 'missingno' }), 0, null), null);
   assert.equal(progressAt(owned({ lineId: 'missingno' }), 0), null);
+});
+
+test('duplicateTarget: linha possuída recebe o XP', () => {
+  const mine = owned({ id: 'pk1', lineId: 'charmander' });
+  assert.equal(duplicateTarget([owned({ id: 'pk0', lineId: 'pichu' }), mine], 'charmander'), mine);
+});
+
+test('duplicateTarget: linha não possuída é captura nova', () => {
+  assert.equal(duplicateTarget([owned({ lineId: 'pichu' })], 'charmander'), null);
+});
+
+test('duplicateTarget: Eevee sem pedra absorve o repetido', () => {
+  const eevee = owned({ lineId: 'eevee', xp: 100 });
+  assert.equal(duplicateTarget([eevee], 'eevee'), eevee);
+});
+
+test('duplicateTarget: com todos os Eevees evoluídos, captura um novo', () => {
+  const pokemon = [owned({ id: 'a', lineId: 'eevee', xp: 250, branchId: 197 })];
+  assert.equal(duplicateTarget(pokemon, 'eevee'), null);
+});
+
+test('duplicateTarget: entre Eevees, o sem pedra é o alvo', () => {
+  const pending = owned({ id: 'b', lineId: 'eevee', xp: 10 });
+  const pokemon = [owned({ id: 'a', lineId: 'eevee', xp: 250, branchId: 134 }), pending];
+  assert.equal(duplicateTarget(pokemon, 'eevee'), pending);
 });

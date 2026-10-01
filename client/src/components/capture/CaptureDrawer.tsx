@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Clock, Swords, X } from 'lucide-react';
+import { ArrowRight, Clock, Swords, X } from 'lucide-react';
 import { useReducedMotion } from 'framer-motion';
 import { Drawer } from '../ui/Drawer';
 import { Button } from '../ui/Button';
@@ -23,7 +23,6 @@ interface CaptureDrawerProps {
 }
 
 const ERRORS: Record<string, string> = {
-  ALREADY_OWNED: 'Você já tem esse Pokémon.',
   NO_ATTEMPTS: 'Suas tentativas de hoje acabaram.',
   DAY_CHANGED: 'O dia virou! Um novo Pokémon apareceu.',
   DB_UNAVAILABLE: 'O servidor não respondeu. Tente de novo em instantes.',
@@ -71,6 +70,10 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
   const [wobbles, setWobbles] = useState(0);
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
   const [confetti, setConfetti] = useState(false);
+  /** Repetido capturado nesta sessão do drawer: o que ele rendeu. */
+  const [gain, setGain] = useState<
+    { xp: number; name: string; evolution: CaptureAttempt['evolution'] } | null
+  >(null);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -96,6 +99,7 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
     const ms = reduced ? REDUCED_MS : SCENE_MS;
     setMessage(null);
     setConfetti(false);
+    setGain(null);
 
     // A request sai junto com o lançamento: a animação cobre a latência.
     const request: Promise<CaptureAttempt | ApiError> = throwPokeball(capture.day).catch(
@@ -140,7 +144,16 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
       applyTrainer(result.trainer);
       await sleep(ms.caught);
       if (!alive.current) return;
-      setMessage({ text: `${result.capture.species.name} foi capturado!`, tone: 'good' });
+      const duplicate = capture.duplicate;
+      if (result.xpGained && duplicate) {
+        setGain({ xp: result.xpGained, name: duplicate.name, evolution: result.evolution ?? null });
+        setMessage({
+          text: `${result.capture.species.name} virou +${result.xpGained} XP para ${duplicate.name}!`,
+          tone: 'good',
+        });
+      } else {
+        setMessage({ text: `${result.capture.species.name} foi capturado!`, tone: 'good' });
+      }
     } else {
       setPhase('escape');
       await sleep(ms.escape);
@@ -164,6 +177,7 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
     if (!open) {
       setMessage(null);
       setConfetti(false);
+      setGain(null);
     }
   }, [open]);
 
@@ -284,6 +298,14 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
               </Button>
             )}
 
+            {capture.status === 'available' && capture.duplicate && (
+              <p className="text-[11px] text-subtle text-center">
+                Você já tem essa linha: capturar dá{' '}
+                <span className="text-highlight font-semibold">+{capture.duplicate.xp} XP</span> para{' '}
+                {capture.duplicate.name}.
+              </p>
+            )}
+
             {capture.status === 'available' && (
               <Button
                 variant="solid"
@@ -301,8 +323,30 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
               <div className="rounded-xl border border-success/30 bg-success-soft p-4 text-center animate-fade-in">
                 <p className="text-sm text-success font-medium">Capturado hoje!</p>
                 <p className="text-xs text-muted mt-1">
-                  Ele já está em Meus Pokémon e pode ir para a mesa.
+                  {gain
+                    ? `Era repetido: virou +${gain.xp} XP para ${gain.name}.`
+                    : 'Confira em Meus Pokémon. Volte amanhã para outro.'}
                 </p>
+                {gain?.evolution && (
+                  <>
+                    <div className="mt-3 flex items-center justify-center gap-3">
+                      <img
+                        src={gain.evolution.from.sprite}
+                        alt={gain.evolution.from.name}
+                        className="w-14 h-14 [image-rendering:pixelated]"
+                      />
+                      <ArrowRight size={16} className="text-subtle" />
+                      <img
+                        src={gain.evolution.to.sprite}
+                        alt={gain.evolution.to.name}
+                        className="w-14 h-14 [image-rendering:pixelated]"
+                      />
+                    </div>
+                    <p className="mt-1 text-sm font-semibold text-text">
+                      {gain.evolution.from.name} evoluiu para {gain.evolution.to.name}!
+                    </p>
+                  </>
+                )}
                 <Button variant="secondary" size="sm" className="mt-3" onClick={onOpenCollection}>
                   Ver meus Pokémon
                 </Button>
@@ -316,14 +360,6 @@ export function CaptureDrawer({ open, onClose, onOpenCollection }: CaptureDrawer
               </div>
             )}
 
-            {capture.status === 'owned' && (
-              <div className="rounded-xl border border-border bg-surface-2 p-4 text-center">
-                <p className="text-sm text-text font-medium">Você já tem essa linha.</p>
-                <p className="text-xs text-muted mt-1">
-                  Não dá para capturar um repetido. Volte amanhã para outro.
-                </p>
-              </div>
-            )}
           </div>
         )}
 

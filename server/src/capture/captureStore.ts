@@ -19,47 +19,40 @@ export async function getDay(userId: string, day: string): Promise<DailyCaptureR
 }
 
 export type AttemptOutcome =
-  | { kind: 'owned' }
   | { kind: 'exhausted' }
-  | { kind: 'thrown'; attempts: number; success: boolean; pokemon: PokemonRecord | null };
+  | {
+      kind: 'thrown';
+      attempts: number;
+      success: boolean;
+      /** Pokémon novo criado pela captura. Null em falha ou em repetido. */
+      pokemon: PokemonRecord | null;
+      /** Repetido: o id de quem recebe o XP. O crédito é do caller, pelo cache. */
+      duplicateOf: string | null;
+    };
 
 /**
  * Uma Pokébola lançada, numa transação só:
  *
- * 1. Recusa se o usuário já tem a linha — checado DENTRO da transação, para a
- *    captura não passar entre a leitura do GET e o clique.
- * 2. Gasta a tentativa com um upsert CONDICIONAL. O `where attempts < N and not
+ * 1. Gasta a tentativa com um upsert CONDICIONAL. O `where attempts < N and not
  *    caught` faz o limite ser garantido pelo banco: duas abas clicando juntas
  *    nunca conseguem a 4ª.
- * 3. Só então sorteia. Acertou: o Pokémon nasce no estágio em que foi capturado
- *    e a linha do dia fica marcada como `caught`.
+ * 2. Só então sorteia. Acertou: a linha do dia fica marcada como `caught` e,
+ *    se não for repetido, o Pokémon nasce no estágio em que foi capturado.
  *
  * `roll` é injetado para o route decidir (sorteio de verdade ou CAPTURE_FORCE).
+ * `duplicateOf` também vem do route: o XP mora no cache, então é lá que se sabe
+ * quem absorve o repetido (ver `duplicateTarget`).
  */
 export async function attempt(
   userId: string,
   day: string,
   species: WildSpecies,
+  duplicateOf: string | null,
   roll: () => boolean,
 ): Promise<AttemptOutcome> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    const owned = await client.query(
-      'SELECT 1 FROM "trainer_pokemon" WHERE "userId" = $1 AND "lineId" = $2 LIMIT 1',
-      [userId, species.lineId],
-    );
-    if ((owned.rowCount ?? 0) > 0) {
-      // Quem capturou HOJE também "tem a linha" — mas para ele a resposta certa
-      // é "acabou por hoje", não "você já tem esse".
-      const today = await client.query<{ caught: boolean }>(
-        'SELECT "caught" FROM "daily_capture" WHERE "userId" = $1 AND "day" = $2',
-        [userId, day],
-      );
-      await client.query('ROLLBACK');
-      return today.rows[0]?.caught ? { kind: 'exhausted' } : { kind: 'owned' };
-    }
 
     const spent = await client.query<{ attempts: number }>(
       `INSERT INTO "daily_capture" ("userId", "day", "attempts")
@@ -79,27 +72,29 @@ export async function attempt(
     const success = roll();
     let pokemon: PokemonRecord | null = null;
     if (success) {
-      const hasAny = await client.query(
-        'SELECT 1 FROM "trainer_pokemon" WHERE "userId" = $1 LIMIT 1',
-        [userId],
-      );
-      pokemon = await trainerStore.create(
-        userId,
-        species.lineId,
-        (hasAny.rowCount ?? 0) === 0,
-        { xp: xpForStage(species.stage), branchId: species.branchId },
-        client,
-      );
+      if (!duplicateOf) {
+        const hasAny = await client.query(
+          'SELECT 1 FROM "trainer_pokemon" WHERE "userId" = $1 LIMIT 1',
+          [userId],
+        );
+        pokemon = await trainerStore.create(
+          userId,
+          species.lineId,
+          (hasAny.rowCount ?? 0) === 0,
+          { xp: xpForStage(species.stage), branchId: species.branchId },
+          client,
+        );
+      }
       await client.query(
         `UPDATE "daily_capture"
             SET "caught" = true, "caughtPokemonId" = $3, "updatedAt" = now()
           WHERE "userId" = $1 AND "day" = $2`,
-        [userId, day, pokemon.id],
+        [userId, day, pokemon?.id ?? duplicateOf],
       );
     }
 
     await client.query('COMMIT');
-    return { kind: 'thrown', attempts, success, pokemon };
+    return { kind: 'thrown', attempts, success, pokemon, duplicateOf: success ? duplicateOf : null };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;

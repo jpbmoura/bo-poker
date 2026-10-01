@@ -5,7 +5,7 @@ import type { TrainerCollection } from './trainer';
 import type { BattleStatus, TypeName } from './battle';
 
 /** Espelho do DTO de `server/src/routes/capture.ts`. */
-export type CaptureStatus = 'available' | 'caught' | 'fled' | 'owned';
+export type CaptureStatus = 'available' | 'caught' | 'fled';
 
 export interface DailyCapture {
   day: string;
@@ -21,6 +21,8 @@ export interface DailyCapture {
   attempts: number;
   maxAttempts: number;
   status: CaptureStatus;
+  /** Já tem a linhagem: capturar vira `xp` para esse Pokémon. Null = Pokémon novo. */
+  duplicate: { pokemonId: string; name: string; xp: number } | null;
   /** ISO do instante em que aparece o próximo. */
   resetsAt: string;
 }
@@ -49,6 +51,9 @@ export interface CaptureAttempt {
   success: boolean;
   capture: DailyCapture;
   trainer: TrainerCollection;
+  /** Repetido capturado: XP creditado no Pokémon da linhagem. */
+  xpGained?: number;
+  evolution?: { from: Pokemon; to: Pokemon } | null;
 }
 
 export function getDailyCapture(): Promise<DailyCapture> {

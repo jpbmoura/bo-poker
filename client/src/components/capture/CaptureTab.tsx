@@ -10,7 +10,6 @@ const LABEL: Record<DailyCapture['status'], string> = {
   available: 'Captura disponível',
   caught: 'Capturado!',
   fled: 'Fugiu · volte amanhã',
-  owned: 'Pokémon do dia',
 };
 
 /**

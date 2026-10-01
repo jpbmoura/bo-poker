@@ -1,4 +1,5 @@
 import {
+  EEVEE_LINE_ID,
   findLine,
   maxStage,
   nextThreshold,
@@ -39,6 +40,23 @@ export function isPendingChoice(p: OwnedPokemon): boolean {
   const line = findLine(p.lineId);
   if (!line?.branches || p.branchId !== null) return false;
   return liveStage(p) >= line.stages.length;
+}
+
+/**
+ * Quem recebe o XP quando a captura do dia é de uma linhagem que a pessoa já
+ * tem. Null = não é repetido, a captura cria um Pokémon novo.
+ *
+ * O Eevee é a exceção: só o Eevee AINDA SEM PEDRA absorve o repetido. Com todos
+ * os Eevees já evoluídos, a pessoa captura outro para escolher uma nova pedra.
+ */
+export function duplicateTarget<T extends OwnedPokemon>(
+  pokemon: readonly T[],
+  lineId: string,
+): T | null {
+  if (lineId === EEVEE_LINE_ID) {
+    return pokemon.find((p) => p.lineId === lineId && p.branchId === null) ?? null;
+  }
+  return pokemon.find((p) => p.lineId === lineId) ?? null;
 }
 
 /**

@@ -80,6 +80,18 @@ export const CAPTURE_CHANCE: Record<Tier, number> = {
   legendary: 5,
 };
 
+/**
+ * XP que um repetido capturado dá ao Pokémon da linhagem que a pessoa já tem.
+ * Em vez de um segundo exemplar, a captura vira progresso.
+ */
+export const DUPLICATE_XP: Record<Tier, number> = {
+  common: 30,
+  uncommon: 50,
+  rare: 80,
+  epic: 120,
+  legendary: 200,
+};
+
 /** Peso relativo de cada tier no sorteio do Pokémon do dia. */
 export const SPAWN_WEIGHT: Record<Tier, number> = {
   common: 40,

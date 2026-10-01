@@ -1,7 +1,13 @@
 import { randomInt } from 'node:crypto';
 import { Router, type Response } from 'express';
 import type { Server } from 'socket.io';
-import { CAPTURE_ATTEMPTS, CAPTURE_CHANCE, spriteUrl, type Tier } from '../data/pokedex.js';
+import {
+  CAPTURE_ATTEMPTS,
+  CAPTURE_CHANCE,
+  DUPLICATE_XP,
+  spriteUrl,
+  type Tier,
+} from '../data/pokedex.js';
 import { config } from '../config.js';
 import * as captureStore from '../capture/captureStore.js';
 import { dayKey, isDayKey, nextReset, spawnFor } from '../capture/dailySpawn.js';
@@ -25,7 +31,13 @@ import { speciesData } from '../battle/deck.js';
 import { effectiveness } from '../battle/typeChart.js';
 import type { TypeName } from '../battle/types.js';
 import { battleDTO, type BattleDTO } from '../battle/view.js';
-import { TrainerCache, formAt, isPendingChoice, liveStage } from '../trainers/index.js';
+import {
+  TrainerCache,
+  duplicateTarget,
+  formAt,
+  isPendingChoice,
+  liveStage,
+} from '../trainers/index.js';
 import type { Pokemon } from '../types/index.js';
 import { dbError, requireUser, type AuthedRequest } from './session.js';
 import { refreshTrainerRooms, trainerDTO, type TrainerDTO } from './trainerView.js';
@@ -34,9 +46,10 @@ import { refreshTrainerRooms, trainerDTO, type TrainerDTO } from './trainerView.
  * - `available`: ainda dá para tentar.
  * - `caught`: capturou hoje.
  * - `fled`: gastou as tentativas sem sucesso.
- * - `owned`: já tem essa linha — captura bloqueada.
  */
-type CaptureStatus = 'available' | 'caught' | 'fled' | 'owned';
+type CaptureStatus = 'available' | 'caught' | 'fled';
+
+type Evolution = { from: Pokemon; to: Pokemon };
 
 /** Espelho em `client/src/services/capture.ts`. */
 interface CaptureDTO {
@@ -53,6 +66,11 @@ interface CaptureDTO {
   attempts: number;
   maxAttempts: number;
   status: CaptureStatus;
+  /**
+   * Já tem a linhagem: capturar vira `xp` para esse Pokémon em vez de um
+   * exemplar novo. Null = a captura cria um Pokémon. Ver `duplicateTarget`.
+   */
+  duplicate: { pokemonId: string; name: string; xp: number } | null;
   /** ISO do instante em que aparece o próximo. */
   resetsAt: string;
 }
@@ -85,24 +103,22 @@ interface PlayDTO {
   /** Só quando a batalha acabou neste turno. */
   capture?: CaptureDTO;
   trainer?: TrainerDTO;
-  evolution?: { from: Pokemon; to: Pokemon } | null;
+  evolution?: Evolution | null;
 }
 
 interface AttemptDTO {
   success: boolean;
   capture: CaptureDTO;
   trainer: TrainerDTO;
+  /** Repetido capturado: XP creditado no Pokémon da linhagem. */
+  xpGained?: number;
+  evolution?: Evolution | null;
 }
 
 const captureTag = 'capture';
 
-function statusOf(
-  attempts: number,
-  caught: boolean,
-  ownsLine: boolean,
-): CaptureStatus {
+function statusOf(attempts: number, caught: boolean): CaptureStatus {
   if (caught) return 'caught';
-  if (ownsLine) return 'owned';
   if (attempts >= CAPTURE_ATTEMPTS) return 'fled';
   return 'available';
 }
@@ -120,7 +136,8 @@ export function createCaptureRouter(io: Server): Router {
       battleStore.getDay(userId, day),
     ]);
     const attempts = record?.attempts ?? 0;
-    const ownsLine = state.pokemon.some((p) => p.lineId === species.lineId);
+    const target = duplicateTarget(state.pokemon, species.lineId);
+    const targetForm = target ? formAt(target, liveStage(target), target.branchId) : null;
     const baseChance = CAPTURE_CHANCE[species.tier];
     const bonus = battle?.status === 'won' ? battle.bonus : 0;
     const wildTypes = speciesData(species.entry.id).types;
@@ -153,7 +170,11 @@ export function createCaptureRouter(io: Server): Router {
       battle: { status: battle?.status ?? 'none', bonus, wildTypes, fighters },
       attempts,
       maxAttempts: CAPTURE_ATTEMPTS,
-      status: statusOf(attempts, record?.caught ?? false, ownsLine),
+      status: statusOf(attempts, record?.caught ?? false),
+      duplicate:
+        target && targetForm
+          ? { pokemonId: target.id, name: targetForm.name, xp: DUPLICATE_XP[species.tier] }
+          : null,
       resetsAt: nextReset(now).toISOString(),
     };
   }
@@ -208,14 +229,11 @@ export function createCaptureRouter(io: Server): Router {
         config.captureForce ? config.captureForce === 'success' : randomInt(100) < chance;
 
       // Garante o cache quente antes: o `put` do sucesso precisa da coleção
-      // inteira em memória, não só do Pokémon novo.
-      if (!TrainerCache.peek(userId)) await TrainerCache.resolve(userId);
+      // inteira em memória, não só do Pokémon novo, e o alvo do repetido sai dela.
+      const state = TrainerCache.peek(userId) ?? (await TrainerCache.resolve(userId));
+      const target = duplicateTarget(state.pokemon, species.lineId);
 
-      const outcome = await captureStore.attempt(userId, day, species, roll);
-      if (outcome.kind === 'owned') {
-        res.status(409).json({ error: 'ALREADY_OWNED' });
-        return;
-      }
+      const outcome = await captureStore.attempt(userId, day, species, target?.id ?? null, roll);
       if (outcome.kind === 'exhausted') {
         res.status(409).json({ error: 'NO_ATTEMPTS' });
         return;
@@ -227,10 +245,19 @@ export function createCaptureRouter(io: Server): Router {
         if (outcome.pokemon.isActive) refreshTrainerRooms(io, userId);
       }
 
+      let evolution: Evolution | null = null;
+      let xpGained: number | undefined;
+      if (outcome.duplicateOf) {
+        xpGained = DUPLICATE_XP[species.tier];
+        evolution = creditXp(userId, outcome.duplicateOf, xpGained);
+      }
+
       const body: AttemptDTO = {
         success: outcome.success,
         capture: await buildCapture(userId, now),
         trainer: trainerDTO(userId),
+        xpGained,
+        evolution,
       };
       res.json(body);
     } catch (err) {
@@ -307,22 +334,18 @@ export function createCaptureRouter(io: Server): Router {
   });
 
   /**
-   * Fim de batalha: credita o XP em quem lutou e devolve a captura (com o bônus)
-   * e a coleção atualizadas. O XP vai pelo cache, como o da rodada: crédito em
-   * memória agora, gravação no próximo flush.
+   * Credita XP num Pokémon da coleção (fim de batalha, repetido capturado). O XP
+   * vai pelo cache, como o da rodada: crédito em memória agora, gravação no
+   * próximo flush. Devolve a evolução, se houve.
    */
-  function settleBattle(
-    userId: string,
-    pokemonId: string | null,
-    xp: number,
-  ): { from: Pokemon; to: Pokemon } | null {
+  function creditXp(userId: string, pokemonId: string | null, xp: number): Evolution | null {
     if (!pokemonId || xp === 0) return null;
     const applied = TrainerCache.applyXp(userId, xp, pokemonId);
     if (!applied) return null;
 
     const beforeStage = liveStage(applied.before);
     const afterStage = liveStage(applied.after);
-    let evolution: { from: Pokemon; to: Pokemon } | null = null;
+    let evolution: Evolution | null = null;
     // Mesma regra do award da rodada: ramificado pendente não evolui sozinho.
     if (afterStage > beforeStage && !isPendingChoice(applied.after)) {
       const from = formAt(applied.before, beforeStage, applied.before.branchId);
@@ -371,7 +394,7 @@ export function createCaptureRouter(io: Server): Router {
       const { record, result: events } = outcome;
       const body: PlayDTO = { battle: battleDTO(record.state, record), events };
       if (record.status !== 'active') {
-        body.evolution = settleBattle(userId, record.pokemonId, record.xpGained);
+        body.evolution = creditXp(userId, record.pokemonId, record.xpGained);
         body.capture = await buildCapture(userId, now);
         body.trainer = trainerDTO(userId);
       }
