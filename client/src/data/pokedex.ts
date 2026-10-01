@@ -731,3 +731,17 @@ export function wildSpecies(): WildSpecies[] {
   wildCache = out;
   return out;
 }
+
+/**
+ * Nome comparável do "Quem é esse Pokémon?": sem caixa, acento nem pontuação,
+ * para "mr mime" bater com "Mr. Mime". Os símbolos de gênero viram letra, senão
+ * os dois Nidoran colapsariam no mesmo nome.
+ */
+export function normalizeName(name: string): string {
+  return name
+    .replace(/♀/g, 'f')
+    .replace(/♂/g, 'm')
+    .normalize('NFD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}

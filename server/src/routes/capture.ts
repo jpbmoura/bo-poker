@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { Router, type Response } from 'express';
+import { Router } from 'express';
 import type { Server } from 'socket.io';
 import {
   CAPTURE_ATTEMPTS,
@@ -10,7 +10,7 @@ import {
 } from '../data/pokedex.js';
 import { config } from '../config.js';
 import * as captureStore from '../capture/captureStore.js';
-import { dayKey, isDayKey, nextReset, spawnFor } from '../capture/dailySpawn.js';
+import { dayKey, nextReset, spawnFor } from '../capture/dailySpawn.js';
 import {
   BATTLE_XP,
   battleBonus,
@@ -35,10 +35,11 @@ import {
   TrainerCache,
   duplicateTarget,
   formAt,
-  isPendingChoice,
   liveStage,
 } from '../trainers/index.js';
 import type { Pokemon } from '../types/index.js';
+import { creditXp, type Evolution } from '../trainers/creditXp.js';
+import { requestDay } from './day.js';
 import { dbError, requireUser, type AuthedRequest } from './session.js';
 import { refreshTrainerRooms, trainerDTO, type TrainerDTO } from './trainerView.js';
 
@@ -48,8 +49,6 @@ import { refreshTrainerRooms, trainerDTO, type TrainerDTO } from './trainerView.
  * - `fled`: gastou as tentativas sem sucesso.
  */
 type CaptureStatus = 'available' | 'caught' | 'fled';
-
-type Evolution = { from: Pokemon; to: Pokemon };
 
 /** Espelho em `client/src/services/capture.ts`. */
 interface CaptureDTO {
@@ -179,24 +178,6 @@ export function createCaptureRouter(io: Server): Router {
     };
   }
 
-  /**
-   * O body leva o `day` que o cliente está mostrando: se o dia virou com o
-   * drawer ou o modal aberto, a ação NÃO pode cair no Pokémon de amanhã sem a
-   * pessoa ver. Null = já respondeu o erro.
-   */
-  function requestDay(req: AuthedRequest, res: Response, now: Date): string | null {
-    const day = dayKey(now);
-    if (!isDayKey(req.body?.day)) {
-      res.status(400).json({ error: 'INVALID_DAY' });
-      return null;
-    }
-    if (req.body.day !== day) {
-      res.status(409).json({ error: 'DAY_CHANGED' });
-      return null;
-    }
-    return day;
-  }
-
   router.get('/today', async (req: AuthedRequest, res) => {
     try {
       res.json(await buildCapture(req.userId!, new Date()));
@@ -249,7 +230,7 @@ export function createCaptureRouter(io: Server): Router {
       let xpGained: number | undefined;
       if (outcome.duplicateOf) {
         xpGained = DUPLICATE_XP[species.tier];
-        evolution = creditXp(userId, outcome.duplicateOf, xpGained);
+        evolution = creditXp(io, userId, outcome.duplicateOf, xpGained);
       }
 
       const body: AttemptDTO = {
@@ -333,29 +314,6 @@ export function createCaptureRouter(io: Server): Router {
     }
   });
 
-  /**
-   * Credita XP num Pokémon da coleção (fim de batalha, repetido capturado). O XP
-   * vai pelo cache, como o da rodada: crédito em memória agora, gravação no
-   * próximo flush. Devolve a evolução, se houve.
-   */
-  function creditXp(userId: string, pokemonId: string | null, xp: number): Evolution | null {
-    if (!pokemonId || xp === 0) return null;
-    const applied = TrainerCache.applyXp(userId, xp, pokemonId);
-    if (!applied) return null;
-
-    const beforeStage = liveStage(applied.before);
-    const afterStage = liveStage(applied.after);
-    let evolution: Evolution | null = null;
-    // Mesma regra do award da rodada: ramificado pendente não evolui sozinho.
-    if (afterStage > beforeStage && !isPendingChoice(applied.after)) {
-      const from = formAt(applied.before, beforeStage, applied.before.branchId);
-      const to = formAt(applied.after, afterStage, applied.after.branchId);
-      if (from && to) evolution = { from, to };
-    }
-    if (applied.after.isActive) refreshTrainerRooms(io, userId, evolution ?? undefined);
-    return evolution;
-  }
-
   router.post('/today/battle/play', async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     const now = new Date();
@@ -394,7 +352,7 @@ export function createCaptureRouter(io: Server): Router {
       const { record, result: events } = outcome;
       const body: PlayDTO = { battle: battleDTO(record.state, record), events };
       if (record.status !== 'active') {
-        body.evolution = creditXp(userId, record.pokemonId, record.xpGained);
+        body.evolution = creditXp(io, userId, record.pokemonId, record.xpGained);
         body.capture = await buildCapture(userId, now);
         body.trainer = trainerDTO(userId);
       }

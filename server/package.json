@@ -11,7 +11,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "node --import tsx --test src/types/wire.test.ts src/data/pokedex.test.ts src/trainers/xp.test.ts src/trainers/species.test.ts src/trainers/trainerCache.test.ts src/capture/dailySpawn.test.ts src/battle/engine.test.ts src/rooms/Room.test.ts src/rooms/RoomManager.test.ts",
+    "test": "node --import tsx --test src/types/wire.test.ts src/data/pokedex.test.ts src/trainers/xp.test.ts src/trainers/species.test.ts src/trainers/trainerCache.test.ts src/capture/dailySpawn.test.ts src/guess/dailyGuess.test.ts src/battle/engine.test.ts src/rooms/Room.test.ts src/rooms/RoomManager.test.ts",
     "db:migrate": "node --import tsx src/db/migrate.ts",
     "sim:battle": "node --import tsx scripts/sim-battle.ts"
   },
@@ -22,6 +22,7 @@
     "express": "^4.21.0",
     "nanoid": "^5.0.7",
     "pg": "^8.23.0",
+    "pngjs": "^7.0.0",
     "socket.io": "^4.8.0"
   },
   "devDependencies": {
@@ -29,6 +30,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.7.4",
     "@types/pg": "^8.23.1",
+    "@types/pngjs": "^6.0.5",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2"
   }

@@ -11,6 +11,7 @@ import { auth, pool } from './auth.js';
 import { registerSocketHandlers, broadcastRoomState } from './socket/handlers.js';
 import { createRoomsRouter } from './routes/rooms.js';
 import { createCaptureRouter } from './routes/capture.js';
+import { createGuessRouter } from './routes/guess.js';
 import { createTrainerRouter } from './routes/trainer.js';
 import { RoomManager } from './rooms/RoomManager.js';
 import { TrainerCache } from './trainers/index.js';
@@ -52,6 +53,7 @@ const io = new Server(httpServer, {
 app.use('/api/rooms', createRoomsRouter(io));
 app.use('/api/trainer', createTrainerRouter(io));
 app.use('/api/capture', createCaptureRouter(io));
+app.use('/api/guess', createGuessRouter(io));
 
 /**
  * Liveness puro: responde 200 enquanto o processo estiver vivo.

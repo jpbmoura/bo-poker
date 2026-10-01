@@ -9,7 +9,11 @@ import { TrainerBadge } from '../components/TrainerBadge';
 import { TrainerDialog } from '../components/TrainerDialog';
 import { CaptureDrawer } from '../components/capture/CaptureDrawer';
 import { CaptureTab } from '../components/capture/CaptureTab';
+import { GuessDrawer } from '../components/guess/GuessDrawer';
+import { GuessTab } from '../components/guess/GuessTab';
+import { SideTabs } from '../components/ui/SideTabs';
 import { useCaptureStore } from '../store/useCaptureStore';
+import { useGuessStore } from '../store/useGuessStore';
 import { useTrainer } from '../hooks/useTrainer';
 import { disconnectSocket } from '../services/socket';
 import { createRoom, listRooms, type RoomSummary } from '../services/rooms';
@@ -32,6 +36,9 @@ export default function HomePage() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const capture = useCaptureStore((s) => s.capture);
   const loadCapture = useCaptureStore((s) => s.load);
+  const [guessOpen, setGuessOpen] = useState(false);
+  const guess = useGuessStore((s) => s.guess);
+  const loadGuess = useGuessStore((s) => s.load);
   const [code, setCode] = useState('');
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,13 +103,15 @@ export default function HomePage() {
   // o Pokémon novo.
   useEffect(() => {
     void loadCapture();
+    void loadGuess();
     const onFocus = () => {
       void refresh();
       void loadCapture();
+      void loadGuess();
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [refresh, loadCapture]);
+  }, [refresh, loadCapture, loadGuess]);
 
   // Fora de uma sala não há assento a liberar, então basta encerrar a sessão.
   const handleSignOut = async () => {
@@ -198,8 +207,11 @@ export default function HomePage() {
 
       <TrainerDialog open={trainerOpen} onClose={() => setTrainerOpen(false)} />
 
-      {capture && !captureOpen && (
-        <CaptureTab capture={capture} onOpen={() => setCaptureOpen(true)} />
+      {!captureOpen && !guessOpen && (
+        <SideTabs>
+          {capture && <CaptureTab capture={capture} onOpen={() => setCaptureOpen(true)} />}
+          {guess && <GuessTab guess={guess} onOpen={() => setGuessOpen(true)} />}
+        </SideTabs>
       )}
       <CaptureDrawer
         open={captureOpen}
@@ -209,6 +221,7 @@ export default function HomePage() {
           setTrainerOpen(true);
         }}
       />
+      <GuessDrawer open={guessOpen} onClose={() => setGuessOpen(false)} />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-6 py-10">
         <div className="flex flex-wrap items-end justify-between gap-4 mb-8">

@@ -32,7 +32,7 @@ export function isDayKey(value: unknown): value is string {
 }
 
 /** Dois números em [0, 1) derivados de forma estável da data (+ sal). */
-function seeded(day: string, salt: string): [number, number] {
+export function seeded(day: string, salt: string): [number, number] {
   const digest = createHash('sha256').update(`${salt}:${day}`).digest();
   return [digest.readUInt32BE(0) / 2 ** 32, digest.readUInt32BE(4) / 2 ** 32];
 }
