@@ -1,12 +1,7 @@
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/inter/700.css';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/700.css';
-@import '@fontsource/pixelify-sans/400.css';
-@import '@fontsource/pixelify-sans/600.css';
+@import '@fontsource/geist-pixel/400.css';
 
 @tailwind base;
 @tailwind components;
@@ -53,8 +48,7 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, sans-serif;
-  font-feature-settings: 'cv11', 'ss03', 'ss01';
+  font-family: 'Geist Pixel', system-ui, sans-serif;
   background-color: rgb(var(--bg));
   color: rgb(var(--text));
   -webkit-font-smoothing: antialiased;

@@ -39,9 +39,9 @@ export default {
         slow: '360ms',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['"Geist Pixel"', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-        pixel: ['"Pixelify Sans"', 'JetBrains Mono', 'monospace'],
+        pixel: ['"Geist Pixel"', 'JetBrains Mono', 'monospace'],
       },
       keyframes: {
         'shake': {
